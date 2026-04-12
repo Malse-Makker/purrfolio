@@ -28,7 +28,7 @@ def ensure_dir(path: Path):
     path.mkdir(parents=True, exist_ok=True)
 
 def is_image(p: Path) -> bool:
-    return p.suffix.lower() in IMAGE_EXTS
+    return p.suffix.lower() in IMAGE_EXTS and not p.name.startswith("._")
 
 def make_thumbnail(src: Path, dst: Path):
     dst.parent.mkdir(parents=True, exist_ok=True)
