@@ -32,15 +32,23 @@ def is_image(p: Path) -> bool:
 
 def make_thumbnail(src: Path, dst: Path):
     dst.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(src) as img:
-        img = img.convert("RGB")
-        img.thumbnail((THUMB_SIZE[0] * 2, THUMB_SIZE[1] * 2), Image.LANCZOS)
-        w, h = img.size
-        tw, th = THUMB_SIZE
-        left = (w - tw) // 2
-        top  = (h - th) // 2
-        img  = img.crop((left, top, left + tw, top + th))
-        img.save(dst, "JPEG", quality=82, optimize=True)
+    # Copy to a temp local file first to avoid xattr errors on remote mounts
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        shutil.copy(src, tmp_path)
+        with Image.open(tmp_path) as img:
+            img = img.convert("RGB")
+            img.thumbnail((THUMB_SIZE[0] * 2, THUMB_SIZE[1] * 2), Image.LANCZOS)
+            w, h = img.size
+            tw, th = THUMB_SIZE
+            left = (w - tw) // 2
+            top  = (h - th) // 2
+            img  = img.crop((left, top, left + tw, top + th))
+            img.save(dst, "JPEG", quality=82, optimize=True)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 def slugify(name: str) -> str:
     name = name.lower().replace(" ", "-").replace("'", "").replace("&", "and")
