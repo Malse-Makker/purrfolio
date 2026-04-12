@@ -393,12 +393,12 @@ def copy_photos_and_thumbs(albums):
                 make_thumbnail(album["thumbnail"], cover_thumb)
             except Exception as e:
                 print(f"[WARN]  Thumbnail failed: {e}")
-                shutil.copy2(album["thumbnail"], cover_thumb)
+                shutil.copy(album["thumbnail"], cover_thumb)
 
         for photo in album["photos"]:
             dst = dest / photo.name
             if not dst.exists():
-                shutil.copy2(photo, dst)
+                shutil.copy(photo, dst)
 
         print(f"[COPY]  {album['name']}: {len(album['photos'])} photos")
 
