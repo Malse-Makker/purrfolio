@@ -20,7 +20,8 @@ SITE_AUTHOR   = os.environ.get("SITE_AUTHOR", "Photographer")
 INSTAGRAM_URL = os.environ.get("INSTAGRAM_URL", "")
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
-THUMB_SIZE = (600, 400)
+THUMB_SIZE   = (600, 400)
+PREVIEW_SIZE = 1800   # max width for masonry preview images
 
 # --- Helpers -----------------------------------------------------------------
 
@@ -47,6 +48,23 @@ def make_thumbnail(src: Path, dst: Path):
             top  = (h - th) // 2
             img  = img.crop((left, top, left + tw, top + th))
             img.save(dst, "JPEG", quality=82, optimize=True)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+def make_preview(src: Path, dst: Path):
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        shutil.copy(src, tmp_path)
+        with Image.open(tmp_path) as img:
+            img = img.convert("RGB")
+            w, h = img.size
+            if w > PREVIEW_SIZE:
+                ratio = PREVIEW_SIZE / w
+                img = img.resize((PREVIEW_SIZE, int(h * ratio)), Image.LANCZOS)
+            img.save(dst, "JPEG", quality=78, optimize=True)
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -481,10 +499,11 @@ def build_index(albums):
 def build_album(album):
     photos_html = ""
     for i, p in enumerate(album["photos"]):
-        web_path = f"/photos/{album['slug']}/{p.name}"
+        original_path = f"/photos/{album['slug']}/{p.name}"
+        preview_path  = f"/previews/{album['slug']}/{p.name}"
         photos_html += f"""
-<div class="photo-item" data-src="{web_path}" data-caption="{p.stem}">
-  <img src="{web_path}" alt="{p.stem}" loading="{'eager' if i < 6 else 'lazy'}">
+<div class="photo-item" data-src="{original_path}" data-caption="{p.stem}">
+  <img src="{preview_path}" alt="{p.stem}" loading="{'eager' if i < 6 else 'lazy'}">
 </div>"""
 
     meta_parts = []
@@ -556,26 +575,43 @@ def build_gear():
 
 def copy_photos_and_thumbs(albums):
     for album in albums:
-        dest = OUTPUT_DIR / "photos" / album["slug"]
+        dest         = OUTPUT_DIR / "photos"   / album["slug"]
+        preview_dest = OUTPUT_DIR / "previews" / album["slug"]
+        thumb_dir    = OUTPUT_DIR / "thumbs"   / album["slug"]
         ensure_dir(dest)
-        thumb_dir = OUTPUT_DIR / "thumbs" / album["slug"]
+        ensure_dir(preview_dest)
         ensure_dir(thumb_dir)
 
         cover_thumb = thumb_dir / "cover.jpg"
         if not cover_thumb.exists():
-            print(f"[THUMB] {album['name']} cover...")
+            print(f"[THUMB]   {album['name']} cover...")
             try:
                 make_thumbnail(album["thumbnail"], cover_thumb)
             except Exception as e:
-                print(f"[WARN]  Thumbnail failed: {e}")
+                print(f"[WARN]    Thumbnail failed: {e}")
                 shutil.copy(album["thumbnail"], cover_thumb)
 
+        new_count     = 0
+        preview_count = 0
         for photo in album["photos"]:
+            # Original (only copied, not resized)
             dst = dest / photo.name
             if not dst.exists():
                 shutil.copy(photo, dst)
+                new_count += 1
 
-        print(f"[COPY]  {album['name']}: {len(album['photos'])} photos")
+            # Preview (resized for masonry display)
+            preview_dst = preview_dest / photo.name
+            if not preview_dst.exists():
+                try:
+                    make_preview(photo, preview_dst)
+                    preview_count += 1
+                except Exception as e:
+                    print(f"[WARN]    Preview failed for {photo.name}: {e}")
+                    shutil.copy(photo, preview_dst)
+
+        print(f"[COPY]    {album['name']}: {len(album['photos'])} photos "
+              f"({new_count} new originals, {preview_count} new previews)")
 
 # --- Main --------------------------------------------------------------------
 
@@ -590,6 +626,7 @@ def main():
     ensure_dir(OUTPUT_DIR)
     ensure_dir(OUTPUT_DIR / "albums")
     ensure_dir(OUTPUT_DIR / "photos")
+    ensure_dir(OUTPUT_DIR / "previews")
     ensure_dir(OUTPUT_DIR / "thumbs")
 
     albums = scan_albums()
