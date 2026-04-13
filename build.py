@@ -139,12 +139,17 @@ def exif_camera(photo: Path):
                 if exif:
                     make  = (exif.get(271) or "").strip()
                     model = (exif.get(272) or "").strip()
-                    # Avoid duplicating make in model (e.g. "Sony SONY A7 IV")
-                    if make and model:
-                        if model.upper().startswith(make.upper()):
-                            return model
-                        return f"{make} {model}"
-                    return model or make
+                    # Normalize make to first word, title-cased (e.g. "NIKON CORPORATION" -> "Nikon")
+                    short_make = make.split()[0].title() if make else ""
+                    # Strip make prefix from model if present (e.g. "NIKON D700" -> "D700")
+                    model_clean = model
+                    if short_make and model.upper().startswith(short_make.upper()):
+                        model_clean = model[len(short_make):].strip()
+                    elif make and model.upper().startswith(make.split()[0].upper()):
+                        model_clean = model[len(make.split()[0]):].strip()
+                    if short_make and model_clean:
+                        return f"{short_make} {model_clean}"
+                    return model_clean or short_make or model or make
         finally:
             tmp_path.unlink(missing_ok=True)
     except Exception:
