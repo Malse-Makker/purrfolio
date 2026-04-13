@@ -430,58 +430,95 @@ def base_html(title: str, active: str, body: str, extra_js: str = "") -> str:
 
 # --- Page builders -----------------------------------------------------------
 
-def gallery_grid_css(n: int) -> str:
-    """Generate grid-template CSS for n albums using layout A pattern."""
+def gallery_layout(albums):
+    """
+    Returns list of (grid_column, grid_row) tuples for each album,
+    plus (col_def, row_def) strings for the grid container.
+
+    Layout rules:
+      1 album  : full width
+      2 albums : two equal columns
+      3 albums : big left (spans 2 rows) + 2 small right
+      4 albums : big left + 2 small right + 1 full-width bottom
+      5+       : groups of 3 alternating:
+                   odd  group: big LEFT  (col1, spans 2 rows) + small1 (col2 row1) + small2 (col2 row2)
+                   even group: big RIGHT (col2, spans 2 rows) + small1 (col1 row1) + small2 (col1 row2)
+                 leftover 1: full-width row
+                 leftover 2: two equal columns row
+    """
+    n = len(albums)
+    ROW_BIG   = "260px"
+    ROW_SMALL = "150px"
+    ROW_FULL  = "200px"
+
     if n == 1:
-        return "grid-template-columns:1fr;grid-template-rows:400px"
+        return [("1/3", "1")], "grid-template-columns:2fr 1fr", f"grid-template-rows:{ROW_FULL}"
+
     if n == 2:
-        return "grid-template-columns:1fr 1fr;grid-template-rows:360px"
-    # Groups of 3: featured wide + tall + small, repeating
-    rows = []
-    col_def = "grid-template-columns:1fr 1fr 1fr"
-    row_heights = []
+        placements = [("1", "1"), ("2", "1")]
+        return placements, "grid-template-columns:1fr 1fr", f"grid-template-rows:{ROW_FULL}"
+
+    if n == 3:
+        placements = [("1", "1/3"), ("2", "1"), ("2", "2")]
+        return placements, "grid-template-columns:2fr 1fr", f"grid-template-rows:{ROW_SMALL} {ROW_SMALL}"
+
+    if n == 4:
+        placements = [("1", "1/3"), ("2", "1"), ("2", "2"), ("1/3", "3")]
+        return placements, "grid-template-columns:2fr 1fr", f"grid-template-rows:{ROW_SMALL} {ROW_SMALL} {ROW_FULL}"
+
+    # 5+ albums: process in groups of 3 after first 3
+    placements = []
+    row_defs   = []
+    current_row = 1
+
     i = 0
+    group_idx = 0
     while i < n:
         remaining = n - i
         if remaining == 1:
-            row_heights.append("160px")
+            placements.append(("1/3", f"{current_row}"))
+            row_defs.append(ROW_FULL)
+            current_row += 1
             i += 1
         elif remaining == 2:
-            row_heights.append("160px")
+            placements.append(("1", f"{current_row}"))
+            placements.append(("2", f"{current_row}"))
+            row_defs.append(ROW_FULL)
+            current_row += 1
             i += 2
         else:
-            row_heights.append("260px")
-            row_heights.append("160px")
+            # group of 3
+            r1, r2 = current_row, current_row + 1
+            row_defs.append(ROW_SMALL)
+            row_defs.append(ROW_SMALL)
+            if group_idx % 2 == 0:
+                # big LEFT
+                placements.append(("1", f"{r1}/{r2+1}"))  # big
+                placements.append(("2", f"{r1}"))          # small top
+                placements.append(("2", f"{r2}"))          # small bottom
+            else:
+                # big RIGHT
+                placements.append(("2", f"{r1}/{r2+1}"))  # big
+                placements.append(("1", f"{r1}"))          # small top
+                placements.append(("1", f"{r2}"))          # small bottom
+            current_row += 2
             i += 3
-    return f"{col_def};grid-template-rows:{' '.join(row_heights)}"
+            group_idx += 1
 
-def gallery_item_style(i: int, n: int) -> str:
-    """Return grid-column/row placement for album at index i."""
-    if n == 1:
-        return ""
-    if n == 2:
-        return ""
-    # Pattern per group of 3: item0=wide(col1-3,row1), item1=tall(col3,row1-2), item2=small(col1,row2), item3=small(col2,row2)
-    # Then repeats with new rows
-    group = i // 3
-    pos   = i % 3
-    # Each group occupies 2 rows
-    base_row = group * 2 + 1
-    if pos == 0:
-        return f"grid-column:1/3;grid-row:{base_row}"
-    elif pos == 1:
-        return f"grid-column:3;grid-row:{base_row}/{base_row+2}"
-    else:
-        # pos==2: check if there's a pos==3 in same group
-        next_i = i + 1
-        if next_i < n and next_i % 3 == 0:
-            # no pos3, this one spans
-            return f"grid-column:1/3;grid-row:{base_row+1}"
-        return f"grid-column:1;grid-row:{base_row+1}"
-    return ""
+    col_def = "grid-template-columns:2fr 1fr"
+    row_def = f"grid-template-rows:{' '.join(row_defs)}"
+    return placements, col_def, row_def
+
 
 def build_index(albums):
     n = len(albums)
+    if n == 0:
+        body = '<h1>Gallery</h1><p class="subtitle">No albums yet.</p>'
+        (OUTPUT_DIR / "index.html").write_text(base_html("Gallery", "gallery", body))
+        print("[BUILD] index.html")
+        return
+
+    placements, col_def, row_def = gallery_layout(albums)
     items = ""
     for i, a in enumerate(albums):
         thumb_path = f"thumbs/{a['slug']}/cover.jpg"
@@ -489,12 +526,12 @@ def build_index(albums):
         meta = f"{count} photo{'s' if count != 1 else ''}"
         if a['date_str']:
             meta += f" &nbsp;·&nbsp; {a['date_str']}"
-        item_style = gallery_item_style(i, n)
-        item_style_attr = f' style="{item_style}"' if item_style else ""
+        col, row = placements[i]
+        item_style = f"grid-column:{col};grid-row:{row}"
         img_style = f'style="object-position:{a["thumb_pos"]}"' if a["thumb_pos"] != "center" else ""
         loading = "eager" if i < 3 else "lazy"
         items += f"""
-<a class="gallery-item" href="/albums/{a['slug']}.html"{item_style_attr}>
+<a class="gallery-item" href="/albums/{a['slug']}.html" style="{item_style}">
   <img src="/{thumb_path}" alt="{a['name']}" loading="{loading}" {img_style}>
   <div class="gallery-overlay">
     <div class="album-name">{a['name']}</div>
@@ -502,11 +539,11 @@ def build_index(albums):
   </div>
 </a>"""
 
-    grid_css = gallery_grid_css(n)
+    grid_style = f"{col_def};{row_def}"
     body = f"""
 <h1>Gallery</h1>
 <p class="subtitle">{n} album{'s' if n != 1 else ''}</p>
-<div class="gallery-grid" style="{grid_css}">{items}</div>"""
+<div class="gallery-grid" style="{grid_style}">{items}</div>"""
 
     (OUTPUT_DIR / "index.html").write_text(base_html("Gallery", "gallery", body))
     print("[BUILD] index.html")
