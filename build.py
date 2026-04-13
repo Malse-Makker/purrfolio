@@ -100,6 +100,30 @@ def copy_asset(src: Path, dst: Path):
         return True
     return False
 
+def read_date(notes_path: Path):
+    """Read date: DD-MM-YYYY from the first line of notes.md. Returns a sortable tuple and display string."""
+    if not notes_path.exists():
+        return (0, 0, 0), ""
+    for line in notes_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line.lower().startswith("date:"):
+            raw = line.split(":", 1)[1].strip()
+            try:
+                parts = raw.split("-")
+                d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                return (y, m, d), f"{d:02d}-{m:02d}-{y}"
+            except Exception:
+                pass
+    return (0, 0, 0), ""
+
+def md_to_html_no_date(path: Path) -> str:
+    """Read md file, strip the date: line, return HTML."""
+    if not path.exists():
+        return ""
+    lines = [l for l in path.read_text(encoding="utf-8").splitlines()
+             if not l.strip().lower().startswith("date:")]
+    return md_to_html("\n".join(lines))
+
 # --- Scan albums -------------------------------------------------------------
 
 def scan_albums():
@@ -115,17 +139,23 @@ def scan_albums():
         if not photos:
             print(f"[SKIP] {album_dir.name}: no images found")
             continue
+        notes_path = album_dir / "notes.md"
+        sort_key, date_str = read_date(notes_path)
         albums.append({
             "name":      album_dir.name,
             "slug":      slugify(album_dir.name),
             "dir":       album_dir,
             "photos":    photos,
             "thumbnail": photos[0],
-            "notes":     read_md(album_dir / "notes.md"),
+            "notes":     md_to_html_no_date(notes_path),
+            "date_str":  date_str,
+            "sort_key":  sort_key,
         })
-        has_notes = "yes" if (album_dir / "notes.md").exists() else "no"
-        print(f"[OK]   {album_dir.name}: {len(photos)} photo(s), notes: {has_notes}")
+        has_notes = "yes" if notes_path.exists() else "no"
+        print(f"[OK]   {album_dir.name}: {len(photos)} photo(s), notes: {has_notes}, date: {date_str or 'none'}")
 
+    # Sort newest first
+    albums.sort(key=lambda a: a["sort_key"], reverse=True)
     return albums
 
 # --- HTML templates ----------------------------------------------------------
@@ -160,13 +190,13 @@ nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 28px;d
 main{padding:40px 28px;max-width:1200px;margin:0 auto}
 h1{font-size:24px;font-weight:400;letter-spacing:.04em;margin-bottom:6px}
 .subtitle{font-size:12px;color:var(--text2);margin-bottom:36px;letter-spacing:.05em;text-transform:uppercase}
-.masonry{columns:4 220px;gap:14px}
-.masonry-item{break-inside:avoid;margin-bottom:14px;border-radius:8px;overflow:hidden;cursor:pointer;display:block;transition:opacity .2s}
-.masonry-item:hover{opacity:.88}
-.masonry-item img{width:100%;height:auto;display:block}
-.masonry-item .cover-label{padding:12px 14px;background:var(--card);border-top:1px solid var(--border)}
-.masonry-item .album-name{font-size:13px;font-weight:500}
-.masonry-item .album-count{font-size:11px;color:var(--text2);margin-top:2px;letter-spacing:.03em}
+.gallery-grid{display:grid;gap:3px}
+.gallery-item{position:relative;overflow:hidden;cursor:pointer;display:block}
+.gallery-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease}
+.gallery-item:hover img{transform:scale(1.03)}
+.gallery-overlay{position:absolute;bottom:0;left:0;right:0;padding:20px 18px 16px;background:linear-gradient(transparent,rgba(0,0,0,.65))}
+.gallery-overlay .album-name{font-size:15px;font-weight:500;color:#fff;letter-spacing:.02em}
+.gallery-overlay .album-meta{font-size:11px;color:rgba(255,255,255,.6);margin-top:3px;letter-spacing:.04em}
 .back{display:inline-flex;align-items:center;gap:8px;font-size:12px;color:var(--text2);margin-bottom:24px;transition:color .2s;letter-spacing:.04em;text-transform:uppercase}
 .back:hover{color:var(--text)}
 .back i{font-size:11px}
@@ -296,24 +326,82 @@ def base_html(title: str, active: str, body: str, extra_js: str = "") -> str:
 
 # --- Page builders -----------------------------------------------------------
 
+def gallery_grid_css(n: int) -> str:
+    """Generate grid-template CSS for n albums using layout A pattern."""
+    if n == 1:
+        return "grid-template-columns:1fr;grid-template-rows:400px"
+    if n == 2:
+        return "grid-template-columns:1fr 1fr;grid-template-rows:360px"
+    # Groups of 3: featured wide + tall + small, repeating
+    rows = []
+    col_def = "grid-template-columns:1fr 1fr 1fr"
+    row_heights = []
+    i = 0
+    while i < n:
+        remaining = n - i
+        if remaining == 1:
+            row_heights.append("160px")
+            i += 1
+        elif remaining == 2:
+            row_heights.append("160px")
+            i += 2
+        else:
+            row_heights.append("260px")
+            row_heights.append("160px")
+            i += 3
+    return f"{col_def};grid-template-rows:{' '.join(row_heights)}"
+
+def gallery_item_style(i: int, n: int) -> str:
+    """Return grid-column/row placement for album at index i."""
+    if n == 1:
+        return ""
+    if n == 2:
+        return ""
+    # Pattern per group of 3: item0=wide(col1-3,row1), item1=tall(col3,row1-2), item2=small(col1,row2), item3=small(col2,row2)
+    # Then repeats with new rows
+    group = i // 3
+    pos   = i % 3
+    # Each group occupies 2 rows
+    base_row = group * 2 + 1
+    if pos == 0:
+        return f"grid-column:1/3;grid-row:{base_row}"
+    elif pos == 1:
+        return f"grid-column:3;grid-row:{base_row}/{base_row+2}"
+    else:
+        # pos==2: check if there's a pos==3 in same group
+        next_i = i + 1
+        if next_i < n and next_i % 3 == 0:
+            # no pos3, this one spans
+            return f"grid-column:1/3;grid-row:{base_row+1}"
+        return f"grid-column:1;grid-row:{base_row+1}"
+    return ""
+
 def build_index(albums):
+    n = len(albums)
     items = ""
     for i, a in enumerate(albums):
         thumb_path = f"thumbs/{a['slug']}/cover.jpg"
         count = len(a['photos'])
+        meta = f"{count} photo{'s' if count != 1 else ''}"
+        if a['date_str']:
+            meta += f" &nbsp;·&nbsp; {a['date_str']}"
+        style = gallery_item_style(i, n)
+        style_attr = f' style="{style}"' if style else ""
+        loading = "eager" if i < 3 else "lazy"
         items += f"""
-<a class="masonry-item" href="/albums/{a['slug']}.html">
-  <img src="/{thumb_path}" alt="{a['name']}" loading="{'eager' if i < 4 else 'lazy'}">
-  <div class="cover-label">
+<a class="gallery-item" href="/albums/{a['slug']}.html"{style_attr}>
+  <img src="/{thumb_path}" alt="{a['name']}" loading="{loading}">
+  <div class="gallery-overlay">
     <div class="album-name">{a['name']}</div>
-    <div class="album-count">{count} photo{'s' if count != 1 else ''}</div>
+    <div class="album-meta">{meta}</div>
   </div>
 </a>"""
 
+    grid_css = gallery_grid_css(n)
     body = f"""
 <h1>Gallery</h1>
-<p class="subtitle">{len(albums)} album{'s' if len(albums) != 1 else ''}</p>
-<div class="masonry">{items}</div>"""
+<p class="subtitle">{n} album{'s' if n != 1 else ''}</p>
+<div class="gallery-grid" style="{grid_css}">{items}</div>"""
 
     (OUTPUT_DIR / "index.html").write_text(base_html("Gallery", "gallery", body))
     print("[BUILD] index.html")
