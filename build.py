@@ -100,29 +100,82 @@ def copy_asset(src: Path, dst: Path):
         return True
     return False
 
-def read_date(notes_path: Path):
-    """Read date: DD-MM-YYYY from the first line of notes.md. Returns a sortable tuple and display string."""
-    if not notes_path.exists():
-        return (0, 0, 0), ""
-    for line in notes_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.lower().startswith("date:"):
-            raw = line.split(":", 1)[1].strip()
-            try:
-                parts = raw.split("-")
-                d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
-                return (y, m, d), f"{d:02d}-{m:02d}-{y}"
-            except Exception:
-                pass
-    return (0, 0, 0), ""
+def exif_date(photo: Path):
+    """Extract DateTimeOriginal from EXIF. Returns sortable tuple and display string, or None."""
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=photo.suffix, delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            shutil.copy(photo, tmp_path)
+            with Image.open(tmp_path) as img:
+                exif = img._getexif()
+                if exif:
+                    # 36867 = DateTimeOriginal, 306 = DateTime
+                    for tag in (36867, 306):
+                        val = exif.get(tag)
+                        if val:
+                            # Format: YYYY:MM:DD HH:MM:SS
+                            date_part = val.split(" ")[0]
+                            y, m, d = date_part.split(":")
+                            y, m, d = int(y), int(m), int(d)
+                            return (y, m, d), f"{d:02d}-{m:02d}-{y}"
+        finally:
+            tmp_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return None, ""
 
-def md_to_html_no_date(path: Path) -> str:
-    """Read md file, strip the date: line, return HTML."""
-    if not path.exists():
-        return ""
-    lines = [l for l in path.read_text(encoding="utf-8").splitlines()
-             if not l.strip().lower().startswith("date:")]
-    return md_to_html("\n".join(lines))
+def exif_camera(photo: Path):
+    """Extract camera make+model from EXIF. Returns string or empty."""
+    try:
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=photo.suffix, delete=False) as tmp:
+            tmp_path = Path(tmp.name)
+        try:
+            shutil.copy(photo, tmp_path)
+            with Image.open(tmp_path) as img:
+                exif = img._getexif()
+                if exif:
+                    make  = (exif.get(271) or "").strip()
+                    model = (exif.get(272) or "").strip()
+                    # Avoid duplicating make in model (e.g. "Sony SONY A7 IV")
+                    if make and model:
+                        if model.upper().startswith(make.upper()):
+                            return model
+                        return f"{make} {model}"
+                    return model or make
+        finally:
+            tmp_path.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return ""
+
+def parse_notes(notes_path: Path):
+    """Parse notes.md, extract date: and camera: meta lines, return (sort_key, date_str, camera_str, html)."""
+    date_override   = None
+    camera_override = None
+    if notes_path.exists():
+        lines     = notes_path.read_text(encoding="utf-8").splitlines()
+        kept      = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.lower().startswith("date:"):
+                raw = stripped.split(":", 1)[1].strip()
+                try:
+                    parts = raw.split("-")
+                    d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                    date_override = (y, m, d), f"{d:02d}-{m:02d}-{y}"
+                except Exception:
+                    pass
+            elif stripped.lower().startswith("camera:"):
+                camera_override = stripped.split(":", 1)[1].strip()
+            else:
+                kept.append(line)
+        notes_html = md_to_html("\n".join(kept))
+    else:
+        notes_html = ""
+    return date_override, camera_override, notes_html
 
 # --- Scan albums -------------------------------------------------------------
 
@@ -140,19 +193,33 @@ def scan_albums():
             print(f"[SKIP] {album_dir.name}: no images found")
             continue
         notes_path = album_dir / "notes.md"
-        sort_key, date_str = read_date(notes_path)
+        date_override, camera_override, notes_html = parse_notes(notes_path)
+
+        # Date: notes.md overrides EXIF
+        if date_override:
+            sort_key, date_str = date_override
+        else:
+            sort_key, date_str = exif_date(photos[0])
+
+        # Camera: notes.md overrides EXIF
+        if camera_override:
+            camera_str = camera_override
+        else:
+            camera_str = exif_camera(photos[0])
+
         albums.append({
-            "name":      album_dir.name,
-            "slug":      slugify(album_dir.name),
-            "dir":       album_dir,
-            "photos":    photos,
-            "thumbnail": photos[0],
-            "notes":     md_to_html_no_date(notes_path),
-            "date_str":  date_str,
-            "sort_key":  sort_key,
+            "name":       album_dir.name,
+            "slug":       slugify(album_dir.name),
+            "dir":        album_dir,
+            "photos":     photos,
+            "thumbnail":  photos[0],
+            "notes":      notes_html,
+            "date_str":   date_str,
+            "sort_key":   sort_key,
+            "camera_str": camera_str,
         })
         has_notes = "yes" if notes_path.exists() else "no"
-        print(f"[OK]   {album_dir.name}: {len(photos)} photo(s), notes: {has_notes}, date: {date_str or 'none'}")
+        print(f"[OK]   {album_dir.name}: {len(photos)} photo(s), date: {date_str or 'none'}, camera: {camera_str or 'none'}")
 
     # Sort newest first
     albums.sort(key=lambda a: a["sort_key"], reverse=True)
@@ -415,6 +482,13 @@ def build_album(album):
   <img src="{web_path}" alt="{p.stem}" loading="{'eager' if i < 6 else 'lazy'}">
 </div>"""
 
+    meta_parts = []
+    if album["date_str"]:
+        meta_parts.append(album["date_str"])
+    if album["camera_str"]:
+        meta_parts.append(album["camera_str"])
+    subtitle_extra = " &nbsp;·&nbsp; ".join(meta_parts)
+
     notes_html = ""
     if album["notes"]:
         notes_html = f'<div class="album-notes">{album["notes"]}</div>'
@@ -424,7 +498,7 @@ def build_album(album):
   <i class="fa-solid fa-arrow-left"></i> Gallery
 </a>
 <h1>{album['name']}</h1>
-<p class="subtitle">{len(album['photos'])} photos</p>
+<p class="subtitle">{len(album['photos'])} photos{'&nbsp;&nbsp;·&nbsp;&nbsp;' + subtitle_extra if subtitle_extra else ''}</p>
 {notes_html}
 <div class="photo-masonry">{photos_html}</div>
 <div class="lightbox" id="lightbox">
