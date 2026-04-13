@@ -32,8 +32,8 @@ def is_image(p: Path) -> bool:
     return p.suffix.lower() in IMAGE_EXTS and not p.name.startswith("._")
 
 def make_thumbnail(src: Path, dst: Path):
+    """Resize to max 800px wide, no cropping. Browser handles positioning via object-fit."""
     dst.parent.mkdir(parents=True, exist_ok=True)
-    # Copy to a temp local file first to avoid xattr errors on remote mounts
     import tempfile
     with tempfile.NamedTemporaryFile(suffix=src.suffix, delete=False) as tmp:
         tmp_path = Path(tmp.name)
@@ -41,13 +41,12 @@ def make_thumbnail(src: Path, dst: Path):
         shutil.copy(src, tmp_path)
         with Image.open(tmp_path) as img:
             img = img.convert("RGB")
-            img.thumbnail((THUMB_SIZE[0] * 2, THUMB_SIZE[1] * 2), Image.LANCZOS)
             w, h = img.size
-            tw, th = THUMB_SIZE
-            left = (w - tw) // 2
-            top  = (h - th) // 2
-            img  = img.crop((left, top, left + tw, top + th))
-            img.save(dst, "JPEG", quality=82, optimize=True)
+            max_w = 800
+            if w > max_w:
+                ratio = max_w / w
+                img = img.resize((max_w, int(h * ratio)), Image.LANCZOS)
+            img.save(dst, "JPEG", quality=80, optimize=True)
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -175,12 +174,13 @@ def exif_camera(photo: Path):
     return ""
 
 def parse_notes(notes_path: Path):
-    """Parse notes.md, extract date: and camera: meta lines, return (sort_key, date_str, camera_str, html)."""
-    date_override   = None
-    camera_override = None
+    """Parse notes.md, extract date:, camera:, thumb_position: meta lines, return parsed values and html."""
+    date_override      = None
+    camera_override    = None
+    thumb_pos_override = None
     if notes_path.exists():
-        lines     = notes_path.read_text(encoding="utf-8").splitlines()
-        kept      = []
+        lines = notes_path.read_text(encoding="utf-8").splitlines()
+        kept  = []
         for line in lines:
             stripped = line.strip()
             if stripped.lower().startswith("date:"):
@@ -193,12 +193,16 @@ def parse_notes(notes_path: Path):
                     pass
             elif stripped.lower().startswith("camera:"):
                 camera_override = stripped.split(":", 1)[1].strip()
+            elif stripped.lower().startswith("thumb_position:"):
+                val = stripped.split(":", 1)[1].strip().lower()
+                if val in ("top", "center", "bottom", "left", "right"):
+                    thumb_pos_override = val
             else:
                 kept.append(line)
         notes_html = md_to_html("\n".join(kept))
     else:
         notes_html = ""
-    return date_override, camera_override, notes_html
+    return date_override, camera_override, thumb_pos_override, notes_html
 
 # --- Scan albums -------------------------------------------------------------
 
@@ -216,7 +220,13 @@ def scan_albums():
             print(f"[SKIP] {album_dir.name}: no images found")
             continue
         notes_path = album_dir / "notes.md"
-        date_override, camera_override, notes_html = parse_notes(notes_path)
+        date_override, camera_override, thumb_pos_override, notes_html = parse_notes(notes_path)
+
+        # Sort photos by name so 00_cover.jpg always comes first
+        photos = sorted(photos, key=lambda p: p.name.lower())
+
+        # Pick cover: first photo not starting with _ or . prefix, fallback to first
+        cover = next((p for p in photos if not p.name.startswith(("_", "."))), photos[0])
 
         # Date: notes.md overrides EXIF
         if date_override:
@@ -230,19 +240,23 @@ def scan_albums():
         else:
             camera_str = exif_camera(photos[0])
 
+        # Thumb position: notes.md or default center
+        thumb_pos = thumb_pos_override or "center"
+
         albums.append({
             "name":       album_dir.name,
             "slug":       slugify(album_dir.name),
             "dir":        album_dir,
             "photos":     photos,
-            "thumbnail":  photos[0],
+            "thumbnail":  cover,
+            "thumb_pos":  thumb_pos,
             "notes":      notes_html,
             "date_str":   date_str,
             "sort_key":   sort_key,
             "camera_str": camera_str,
         })
         has_notes = "yes" if notes_path.exists() else "no"
-        print(f"[OK]   {album_dir.name}: {len(photos)} photo(s), date: {date_str or 'none'}, camera: {camera_str or 'none'}")
+        print(f"[OK]   {album_dir.name}: {len(photos)} photo(s), date: {date_str or 'none'}, camera: {camera_str or 'none'}, thumb: {thumb_pos}")
 
     # Sort newest first
     albums.sort(key=lambda a: a["sort_key"], reverse=True)
@@ -282,7 +296,7 @@ h1{font-size:24px;font-weight:400;letter-spacing:.04em;margin-bottom:6px}
 .subtitle{font-size:12px;color:var(--text2);margin-bottom:36px;letter-spacing:.05em;text-transform:uppercase}
 .gallery-grid{display:grid;gap:3px}
 .gallery-item{position:relative;overflow:hidden;cursor:pointer;display:block}
-.gallery-item img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s ease}
+.gallery-item img{width:100%;height:100%;object-fit:cover;object-position:center;display:block;transition:transform .4s ease}
 .gallery-item:hover img{transform:scale(1.03)}
 .gallery-overlay{position:absolute;bottom:0;left:0;right:0;padding:20px 18px 16px;background:linear-gradient(transparent,rgba(0,0,0,.65))}
 .gallery-overlay .album-name{font-size:15px;font-weight:500;color:#fff;letter-spacing:.02em}
@@ -475,12 +489,13 @@ def build_index(albums):
         meta = f"{count} photo{'s' if count != 1 else ''}"
         if a['date_str']:
             meta += f" &nbsp;·&nbsp; {a['date_str']}"
-        style = gallery_item_style(i, n)
-        style_attr = f' style="{style}"' if style else ""
+        item_style = gallery_item_style(i, n)
+        item_style_attr = f' style="{item_style}"' if item_style else ""
+        img_style = f'style="object-position:{a["thumb_pos"]}"' if a["thumb_pos"] != "center" else ""
         loading = "eager" if i < 3 else "lazy"
         items += f"""
-<a class="gallery-item" href="/albums/{a['slug']}.html"{style_attr}>
-  <img src="/{thumb_path}" alt="{a['name']}" loading="{loading}">
+<a class="gallery-item" href="/albums/{a['slug']}.html"{item_style_attr}>
+  <img src="/{thumb_path}" alt="{a['name']}" loading="{loading}" {img_style}>
   <div class="gallery-overlay">
     <div class="album-name">{a['name']}</div>
     <div class="album-meta">{meta}</div>
