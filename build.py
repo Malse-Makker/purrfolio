@@ -222,11 +222,17 @@ def scan_albums():
         notes_path = album_dir / "notes.md"
         date_override, camera_override, thumb_pos_override, notes_html = parse_notes(notes_path)
 
-        # Sort photos by name so 00_cover.jpg always comes first
+        # Sort photos by name so cover.jpg / 00_cover.jpg always comes first
         photos = sorted(photos, key=lambda p: p.name.lower())
 
-        # Pick cover: first photo not starting with _ or . prefix, fallback to first
-        cover = next((p for p in photos if not p.name.startswith(("_", "."))), photos[0])
+        # Pick cover: prefer file starting with "cover", else first non-underscore/dot file
+        cover = next((p for p in photos if p.stem.lower().startswith("cover")),
+                     next((p for p in photos if not p.name.startswith(("_", "."))), photos[0]))
+
+        # Exclude cover file from the album gallery (it's only used as thumbnail)
+        gallery_photos = [p for p in photos if not p.stem.lower().startswith("cover")]
+        if not gallery_photos:
+            gallery_photos = photos  # fallback if all photos are named cover*
 
         # Date: notes.md overrides EXIF
         if date_override:
@@ -244,19 +250,22 @@ def scan_albums():
         thumb_pos = thumb_pos_override or "center"
 
         albums.append({
-            "name":       album_dir.name,
-            "slug":       slugify(album_dir.name),
-            "dir":        album_dir,
-            "photos":     photos,
-            "thumbnail":  cover,
-            "thumb_pos":  thumb_pos,
-            "notes":      notes_html,
-            "date_str":   date_str,
-            "sort_key":   sort_key,
-            "camera_str": camera_str,
+            "name":          album_dir.name,
+            "slug":          slugify(album_dir.name),
+            "dir":           album_dir,
+            "photos":        gallery_photos,
+            "all_photos":    photos,
+            "thumbnail":     cover,
+            "thumb_pos":     thumb_pos,
+            "notes":         notes_html,
+            "date_str":      date_str,
+            "sort_key":      sort_key,
+            "camera_str":    camera_str,
         })
         has_notes = "yes" if notes_path.exists() else "no"
-        print(f"[OK]   {album_dir.name}: {len(photos)} photo(s), date: {date_str or 'none'}, camera: {camera_str or 'none'}, thumb: {thumb_pos}")
+        cover_excluded = len(photos) - len(gallery_photos)
+        print(f"[OK]   {album_dir.name}: {len(gallery_photos)} photo(s) "
+              f"({cover_excluded} cover excluded), date: {date_str or 'none'}, camera: {camera_str or 'none'}, thumb: {thumb_pos}")
 
     # Sort newest first
     albums.sort(key=lambda a: a["sort_key"], reverse=True)
