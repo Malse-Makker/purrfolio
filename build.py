@@ -339,7 +339,7 @@ h1{font-size:24px;font-weight:400;letter-spacing:.04em;margin-bottom:6px}
 .about-text h1:first-child,.about-text h2:first-child,.about-text h3:first-child{margin-top:0}
 .about-text p{font-size:14px;line-height:1.75;color:var(--text2);margin-bottom:6px}
 .about-text strong{color:var(--text)}
-.gear-page{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;max-width:900px}
+.gear-page{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;max-width:900px;margin:0 auto}
 .gear-about .about-name{font-size:16px;font-weight:500;color:var(--text);margin-bottom:12px}
 .gear-about .about-photo-wrap{width:100%;max-width:200px;border-radius:8px;overflow:hidden;margin-bottom:16px}
 .gear-about .about-photo-wrap img{width:100%;height:auto;display:block}
