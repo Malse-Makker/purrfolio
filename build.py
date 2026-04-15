@@ -339,14 +339,19 @@ h1{font-size:24px;font-weight:400;letter-spacing:.04em;margin-bottom:6px}
 .about-text h1:first-child,.about-text h2:first-child,.about-text h3:first-child{margin-top:0}
 .about-text p{font-size:14px;line-height:1.75;color:var(--text2);margin-bottom:6px}
 .about-text strong{color:var(--text)}
-.gear-section-title{font-size:11px;font-weight:500;color:var(--text2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
-.gear-md h2{font-size:13px;font-weight:500;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);margin-top:28px}
-.gear-md h2:first-child{margin-top:0}
-.gear-md h3{font-size:13px;font-weight:500;color:var(--text);margin-bottom:8px;margin-top:16px}
-.gear-md ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:8px}
-.gear-md li{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--text2)}
-.gear-md li strong{color:var(--text);display:block;margin-bottom:2px}
-.gear-md p{font-size:13px;color:var(--text2);margin-bottom:6px}
+.gear-page{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;max-width:900px}
+.gear-about .about-name{font-size:16px;font-weight:500;color:var(--text);margin-bottom:12px}
+.gear-about .about-photo-wrap{width:100%;max-width:200px;border-radius:8px;overflow:hidden;margin-bottom:16px}
+.gear-about .about-photo-wrap img{width:100%;height:auto;display:block}
+.gear-about p{font-size:13px;line-height:1.75;color:var(--text2);margin-bottom:6px}
+.gear-about strong{color:var(--text)}
+.gear-list .gcat{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);padding:10px 0 5px;border-bottom:0.5px solid var(--border);margin-top:20px}
+.gear-list .gcat:first-child{margin-top:0}
+.gear-list .grow{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:0.5px solid var(--border)}
+.gear-list .grow:last-child{border-bottom:none}
+.gear-list .grn{font-size:13px;color:var(--text)}
+.gear-list .grd{font-size:12px;color:var(--text2)}
+@media(max-width:600px){.gear-page{grid-template-columns:1fr}}
 footer{text-align:center;font-size:11px;color:var(--text2);padding:28px 0;border-top:1px solid var(--border);margin-top:48px;letter-spacing:.05em}
 footer a{color:var(--text2);text-decoration:none;border-bottom:1px solid var(--border);transition:color .2s,border-color .2s;padding-bottom:1px}
 footer a:hover{color:var(--text);border-color:var(--text)}
@@ -598,6 +603,34 @@ def build_album(album):
     out.write_text(base_html(album["name"], "gallery", body, LIGHTBOX_JS))
     print(f"[BUILD] albums/{album['slug']}.html")
 
+def gear_md_to_list_html(path: Path) -> str:
+    """Convert gear.md to gear-list HTML with .gcat / .grow rows instead of cards."""
+    if not path.exists():
+        return "<p>Edit <code>context/gear.md</code> to list your gear.</p>"
+
+    html = ""
+    in_list = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("## "):
+            if in_list:
+                html += "</div>\n"
+                in_list = False
+            html += f'<div class="gcat">{s[3:]}</div>\n'
+        elif s.startswith("- "):
+            item = s[2:]
+            # Split "**Name** — description" into name + desc
+            import re as _re
+            m = _re.match(r"\*\*(.+?)\*\*\s*[-—]\s*(.*)", item)
+            if m:
+                name, desc = m.group(1), m.group(2)
+            else:
+                name, desc = item.replace("**", ""), ""
+            html += f'<div class="grow"><span class="grn">{name}</span><span class="grd">{desc}</span></div>\n'
+    return html
+
 def build_gear():
     about_file  = CONTEXT_DIR / "about.md"
     gear_file   = CONTEXT_DIR / "gear.md"
@@ -608,26 +641,27 @@ def build_gear():
     if not about_html:
         about_html = "<p>Edit <code>context/about.md</code> to update this section.</p>"
 
-    gear_html = read_md(gear_file)
-    if not gear_html:
-        gear_html = "<p>Edit <code>context/gear.md</code> to list your gear.</p>"
+    gear_list_html = gear_md_to_list_html(gear_file)
 
     copy_asset(photo_src, photo_dst)
     photo_exists = photo_dst.exists()
 
+    photo_block = ""
     if photo_exists:
-        about_block = f"""
-<div class="about-layout">
-  <div class="about-photo"><img src="/me.jpg" alt="{SITE_AUTHOR}"></div>
-  <div class="about-text">{about_html}</div>
-</div>"""
-    else:
-        about_block = f'<div class="about-text" style="max-width:640px;margin-bottom:40px;padding-bottom:32px;border-bottom:1px solid var(--border)">{about_html}</div>'
+        photo_block = f'<div class="about-photo-wrap"><img src="/me.jpg" alt="{SITE_AUTHOR}"></div>'
 
     body = f"""
 <h1>My gear &amp; me</h1>
-{about_block}
-<div class="gear-md">{gear_html}</div>"""
+<div class="gear-page">
+  <div class="gear-about">
+    {photo_block}
+    <div class="about-name">{SITE_AUTHOR}</div>
+    {about_html}
+  </div>
+  <div class="gear-list">
+    {gear_list_html}
+  </div>
+</div>"""
 
     (OUTPUT_DIR / "gear.html").write_text(base_html("My gear & me", "gear", body))
     print("[BUILD] gear.html")
