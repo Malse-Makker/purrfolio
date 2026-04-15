@@ -346,6 +346,7 @@ h1{font-size:24px;font-weight:400;letter-spacing:.04em;margin-bottom:6px}
 .about-text p{font-size:14px;line-height:1.75;color:var(--text2);margin-bottom:6px}
 .about-text strong{color:var(--text)}
 .gear-page{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start;max-width:900px;margin:0 auto}
+.gear-page-title{grid-column:1/3;font-size:24px;font-weight:400;letter-spacing:.04em;margin-bottom:6px}
 .gear-about .about-name{font-size:16px;font-weight:500;color:var(--text);margin-bottom:12px}
 .gear-about .about-photo-wrap{width:100%;max-width:200px;border-radius:8px;overflow:hidden;margin-bottom:16px}
 .gear-about .about-photo-wrap img{width:100%;height:auto;display:block}
@@ -659,8 +660,8 @@ def build_gear():
         photo_block = f'<div class="about-photo-wrap"><img src="/me.jpg" alt="{SITE_AUTHOR}"></div>'
 
     body = f"""
-<h1>My gear &amp; me</h1>
 <div class="gear-page">
+  <h1 class="gear-page-title">My gear &amp; me</h1>
   <div class="gear-about">
     {photo_block}
     {about_html}
