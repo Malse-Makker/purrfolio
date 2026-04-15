@@ -82,6 +82,10 @@ def md_to_html(text: str) -> str:
                 in_list = False
             html += "<br>\n"
             continue
+        if line in ("---", "***", "___"):
+            if in_list: html += "</ul>\n"; in_list = False
+            html += "<hr style=\"border:none;border-top:0.5px solid var(--border);margin:16px 0\">\n"
+            continue
         if line.startswith("### "):
             if in_list: html += "</ul>\n"; in_list = False
             html += f"<h3>{line[4:]}</h3>\n"
@@ -96,11 +100,13 @@ def md_to_html(text: str) -> str:
             item = line[2:]
             item = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", item)
             item = re.sub(r"\*(.+?)\*",     r"<em>\1</em>",         item)
+            item = re.sub(r"\[(.+?)\]\((.+?)\)", r'<a href="\2">\1</a>', item)
             html += f"<li>{item}</li>\n"
         else:
             if in_list: html += "</ul>\n"; in_list = False
             line = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", line)
             line = re.sub(r"\*(.+?)\*",     r"<em>\1</em>",         line)
+            line = re.sub(r"\[(.+?)\]\((.+?)\)", r'<a href="\2" style="color:var(--accent);border-bottom:1px solid var(--border)">\1</a>', line)
             html += f"<p>{line}</p>\n"
     if in_list:
         html += "</ul>\n"
@@ -345,6 +351,8 @@ h1{font-size:24px;font-weight:400;letter-spacing:.04em;margin-bottom:6px}
 .gear-about .about-photo-wrap img{width:100%;height:auto;display:block}
 .gear-about p{font-size:13px;line-height:1.75;color:var(--text2);margin-bottom:6px}
 .gear-about strong{color:var(--text)}
+.gear-about a{color:var(--accent)}
+.gear-about br{display:block;margin-bottom:4px}
 .gear-list .gcat{font-size:10px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);padding:10px 0 5px;border-bottom:0.5px solid var(--border);margin-top:20px}
 .gear-list .gcat:first-child{margin-top:0}
 .gear-list .grow{display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:0.5px solid var(--border)}
@@ -655,7 +663,6 @@ def build_gear():
 <div class="gear-page">
   <div class="gear-about">
     {photo_block}
-    <div class="about-name">{SITE_AUTHOR}</div>
     {about_html}
   </div>
   <div class="gear-list">
