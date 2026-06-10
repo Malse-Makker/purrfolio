@@ -10,12 +10,9 @@ jobs:
     runs-on: self-hosted
     steps:
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /home/ubuntu/${{ vars.PROJECT_NAME }}
-            git pull origin main
-            docker compose up --build -d
+        run: |
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "cd /home/ubuntu/${{ vars.PROJECT_NAME }} && git pull origin main && docker compose up --build -d"
+          rm /tmp/deploy_key
