@@ -126,7 +126,11 @@ Add a new proxy host pointing to the `purrfolio-nginx` container on port 80. Ena
 
 ## License
 
-MIT
+MIT — free to use, modify, and share.
+
+---
+
+Purrfolio is part of the **makkers collection** — a set of free, open-source hobby projects built and hosted at [projecten.makkers.net](https://projecten.makkers.net). Non-commercial, made for fun and learning.
 
 ---
 
