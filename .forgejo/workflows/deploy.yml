@@ -14,5 +14,5 @@ jobs:
           echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "cd /home/ubuntu/${{ vars.PROJECT_NAME }} && git pull origin main && docker compose up --build -d"
+            "cd /home/ubuntu/${{ vars.PROJECT_NAME }} && git pull origin main && bash build.sh && docker compose up --build -d"
           rm /tmp/deploy_key
