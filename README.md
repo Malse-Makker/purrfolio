@@ -1,6 +1,6 @@
 # Purrfolio
 
-A minimal self-hosted photography portfolio. Drop a folder of photos on your server, run one command, and the site builds itself.
+A minimal, self-hosted photography portfolio. Drop a folder of photos on your server, run one command, and the site builds itself.
 
 No CMS, no database, no framework. A Python script scans a directory of photo albums and outputs plain HTML served by Nginx.
 
