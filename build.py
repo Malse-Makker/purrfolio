@@ -408,11 +408,15 @@ document.addEventListener('keydown', e => {
 });
 """
 
+VERSION = (Path(__file__).parent / "VERSION").read_text().strip()
+
 def footer_html() -> str:
     parts = [f"&copy; {SITE_AUTHOR}"]
     if INSTAGRAM_URL:
         parts.append(f'<a href="{INSTAGRAM_URL}" target="_blank" rel="noopener"><i class="fa-brands fa-instagram"></i> Instagram</a>')
-    parts.append(f'site made by <a href="https://github.com/Nijntje94/Purrfolio" target="_blank" rel="noopener">Purrfolio</a>')
+    parts.append(f'<a href="https://projecten.makkers.net" target="_blank" rel="noopener">projecten.makkers.net</a>')
+    parts.append(f'<a href="https://codeberg.org/nijntje94/purrfolio" target="_blank" rel="noopener">Codeberg</a>')
+    parts.append(f'<span>{VERSION}</span>')
     return "<footer>" + " &nbsp;&middot;&nbsp; ".join(parts) + "</footer>"
 
 def nav_html(active: str) -> str:

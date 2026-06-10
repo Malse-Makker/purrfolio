@@ -127,3 +127,7 @@ Add a new proxy host pointing to the `purrfolio-nginx` container on port 80. Ena
 ## License
 
 MIT
+
+---
+
+*This project was built with the help of AI as a personal play and learning project — to learn more about AI and about building self-hosted tools. The CI/CD pipeline (automatic deployment via Codeberg Actions) is part of that learning process too.*
