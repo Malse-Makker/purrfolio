@@ -36,6 +36,7 @@ docker run --rm \
   -v "$PHOTOS_DIR":/photos:ro \
   -v "$OUTPUT_DIR":/output \
   -v "$SCRIPT_DIR/context":/app/context:ro \
+  -v "$SCRIPT_DIR/VERSION":/app/VERSION:ro \
   -e PHOTOS_DIR=/photos \
   -e OUTPUT_DIR=/output \
   -e CONTEXT_DIR=/app/context \
