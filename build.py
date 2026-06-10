@@ -280,15 +280,14 @@ def scan_albums():
 # --- HTML templates ----------------------------------------------------------
 
 THEME_CSS = """
-html,body{--bg:#fff;--bg2:#f5f5f0;--text:#1a1a1a;--text2:#666;--accent:#1a1a1a;--border:rgba(0,0,0,.1);--card:#fff}
-html.theme-dark,html.theme-dark body{--bg:#1a1a1a;--bg2:#242424;--text:#e8e8e0;--text2:#aaa;--accent:#e8e8e0;--border:rgba(255,255,255,.1);--card:#2a2a2a}
-html.theme-cat,html.theme-cat body{--bg:#303446;--bg2:#292c3c;--text:#c6d0f5;--text2:#a5adce;--accent:#ca9ee6;--border:rgba(198,208,245,.15);--card:#363a4f}
+html,body{--bg:#eff1f5;--bg2:#e6e9ef;--text:#4c4f69;--text2:#6c6f85;--accent:#8839ef;--border:rgba(76,79,105,.15);--card:#eff1f5}
+html.theme-frappe,html.theme-frappe body{--bg:#303446;--bg2:#292c3c;--text:#c6d0f5;--text2:#a5adce;--accent:#ca9ee6;--border:rgba(198,208,245,.15);--card:#363a4f}
 """
 
 THEME_INLINE = """
 (function(){
-  var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
-  document.documentElement.className=t==='light'?'':'theme-'+t;
+  var t=localStorage.getItem('theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'frappe':'latte');
+  document.documentElement.className=t==='latte'?'':'theme-'+t;
 })();
 """
 
@@ -368,15 +367,15 @@ footer a:hover{color:var(--text);border-color:var(--text)}
 """
 
 THEME_JS = """
-const THEMES = ['light','dark','cat'];
+const THEMES = ['latte','frappe'];
 const btns = document.querySelectorAll('.theme-btn');
 function applyTheme(t) {
-  document.documentElement.className = t === 'light' ? '' : 'theme-' + t;
+  document.documentElement.className = t === 'latte' ? '' : 'theme-' + t;
   btns.forEach((b,i) => b.classList.toggle('active', THEMES[i] === t));
   localStorage.setItem('theme', t);
 }
 btns.forEach((b, i) => b.addEventListener('click', () => applyTheme(THEMES[i])));
-const saved = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const saved = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'frappe' : 'latte');
 applyTheme(saved);
 """
 
@@ -430,9 +429,8 @@ def nav_html(active: str) -> str:
   <span class="site-title">{SITE_TITLE}</span>
   <div class="nav-links">{items}</div>
   <div class="theme-switcher">
-    <button class="theme-btn" title="Light" aria-label="Light theme"><i class="fa-solid fa-sun"></i></button>
-    <button class="theme-btn" title="Dark" aria-label="Dark theme"><i class="fa-solid fa-moon"></i></button>
-    <button class="theme-btn" title="Catppuccin" aria-label="Catppuccin theme"><i class="fa-solid fa-cat"></i></button>
+    <button class="theme-btn" title="Latte" aria-label="Catppuccin Latte"><i class="fa-solid fa-sun"></i></button>
+    <button class="theme-btn" title="Frappe" aria-label="Catppuccin Frappe"><i class="fa-solid fa-moon"></i></button>
   </div>
 </nav>"""
 
