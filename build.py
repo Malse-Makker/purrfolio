@@ -7,6 +7,8 @@ Scans the photos directory and outputs a plain HTML site into the output directo
 import os
 import re
 import shutil
+from html import escape
+from urllib.parse import quote
 from pathlib import Path
 from PIL import Image
 
@@ -15,9 +17,9 @@ from PIL import Image
 PHOTOS_DIR    = Path(os.environ.get("PHOTOS_DIR", "./photos"))
 OUTPUT_DIR    = Path(os.environ.get("OUTPUT_DIR", "./output"))
 CONTEXT_DIR   = Path(os.environ.get("CONTEXT_DIR", "./context"))
-SITE_TITLE    = os.environ.get("SITE_TITLE", "My Portfolio")
-SITE_AUTHOR   = os.environ.get("SITE_AUTHOR", "Photographer")
-INSTAGRAM_URL = os.environ.get("INSTAGRAM_URL", "")
+SITE_TITLE    = escape(os.environ.get("SITE_TITLE", "My Portfolio"))
+SITE_AUTHOR   = escape(os.environ.get("SITE_AUTHOR", "Photographer"))
+INSTAGRAM_URL = escape(os.environ.get("INSTAGRAM_URL", ""), quote=True)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 THUMB_SIZE   = (600, 400)
@@ -256,7 +258,7 @@ def scan_albums():
         thumb_pos = thumb_pos_override or "center"
 
         albums.append({
-            "name":          album_dir.name,
+            "name":          escape(album_dir.name),
             "slug":          slugify(album_dir.name),
             "dir":           album_dir,
             "photos":        gallery_photos,
@@ -442,7 +444,7 @@ def base_html(title: str, active: str, body: str, extra_js: str = "") -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title} — {SITE_TITLE}</title>
 <script>{THEME_INLINE}</script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer">
 <style>{THEME_CSS}{BASE_CSS}</style>
 </head>
 <body>
@@ -576,11 +578,12 @@ def build_index(albums):
 def build_album(album):
     photos_html = ""
     for i, p in enumerate(album["photos"]):
-        original_path = f"/photos/{album['slug']}/{p.name}"
-        preview_path  = f"/previews/{album['slug']}/{p.name}"
+        original_path = f"/photos/{album['slug']}/{quote(p.name)}"
+        preview_path  = f"/previews/{album['slug']}/{quote(p.name)}"
+        caption = escape(p.stem, quote=True)
         photos_html += f"""
-<div class="photo-item" data-src="{original_path}" data-caption="{p.stem}">
-  <img src="{preview_path}" alt="{p.stem}" loading="{'eager' if i < 6 else 'lazy'}">
+<div class="photo-item" data-src="{original_path}" data-caption="{caption}">
+  <img src="{preview_path}" alt="{caption}" loading="{'eager' if i < 6 else 'lazy'}">
 </div>"""
 
     meta_parts = []

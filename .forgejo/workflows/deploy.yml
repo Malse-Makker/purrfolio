@@ -11,8 +11,9 @@ jobs:
     steps:
       - name: Deploy via SSH
         run: |
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
-          ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+          KEY_FILE="$(mktemp)"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          chmod 600 "$KEY_FILE"
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$KEY_FILE"
+          ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "cd /home/ubuntu/${{ vars.PROJECT_NAME }} && git pull origin main && bash build.sh && docker compose up --build -d"
-          rm /tmp/deploy_key
