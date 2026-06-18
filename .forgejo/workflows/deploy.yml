@@ -16,4 +16,4 @@ jobs:
           chmod 600 "$KEY_FILE"
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$KEY_FILE"
           ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "cd /home/ubuntu/${{ vars.PROJECT_NAME }} && git pull origin main && bash build.sh && docker compose up --build -d"
+            "cd /home/ubuntu/${{ vars.PROJECT_NAME }} && git pull origin main && bash build.sh && docker compose up -d --build --force-recreate"
