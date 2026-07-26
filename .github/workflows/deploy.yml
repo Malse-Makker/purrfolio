@@ -1,0 +1,23 @@
+name: Deploy to production
+
+on:
+  push:
+    branches:
+      - main
+
+# GitHub-hosted runner: it SSHes to the OVH server, which then pulls this
+# (private) repo via its own read-only deploy key, regenerates the static
+# gallery and recreates the container. Only SSH_PRIVATE_KEY is a secret;
+# host, user and path are fixed and low-risk.
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        run: |
+          KEY_FILE="$(mktemp)"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          chmod 600 "$KEY_FILE"
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$KEY_FILE"
+          ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ubuntu@makkers.net \
+            "cd /home/ubuntu/purrfolio && git pull origin main && bash build.sh && docker compose up -d --build --force-recreate"
