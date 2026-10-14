@@ -9,6 +9,7 @@ import re
 import shutil
 from html import escape
 from urllib.parse import quote
+from datetime import datetime
 from pathlib import Path
 from PIL import Image
 
@@ -242,11 +243,21 @@ def scan_albums():
         if not gallery_photos:
             gallery_photos = photos  # fallback if all photos are named cover*
 
-        # Date: notes.md overrides EXIF
+        # Date: notes.md overrides EXIF. Try a few photos (an export may strip
+        # EXIF from some), then fall back to the folder date so every album
+        # always has a sortable date and the build never crashes on None.
         if date_override:
             sort_key, date_str = date_override
         else:
-            sort_key, date_str = exif_date(photos[0])
+            sort_key, date_str = None, ""
+            for candidate in photos[:5]:
+                sort_key, date_str = exif_date(candidate)
+                if sort_key:
+                    break
+            if not sort_key:
+                mtime = datetime.fromtimestamp(album_dir.stat().st_mtime)
+                sort_key = (mtime.year, mtime.month, mtime.day)
+                date_str = f"{mtime.day:02d}-{mtime.month:02d}-{mtime.year}"
 
         # Camera: notes.md overrides EXIF
         if camera_override:
@@ -276,7 +287,7 @@ def scan_albums():
               f"({cover_excluded} cover excluded), date: {date_str or 'none'}, camera: {camera_str or 'none'}, thumb: {thumb_pos}")
 
     # Sort newest first
-    albums.sort(key=lambda a: a["sort_key"], reverse=True)
+    albums.sort(key=lambda a: a["sort_key"] or (0, 0, 0), reverse=True)
     return albums
 
 # --- HTML templates ----------------------------------------------------------
