@@ -361,7 +361,7 @@ def build_images(albums):
             made += render(p, OUTPUT_DIR / "previews" / slug / p.name, PREVIEW_SIZE, PREVIEW_SIZE, 85)
             dst = orig_dir / p.name
             if not is_fresh(p, dst):
-                shutil.copy2(p, dst)                  # original for "download"
+                shutil.copyfile(p, dst)               # original; copy2 fails on rclone (xattrs)
                 made += 1
         print(f"[IMG]     {a['name']}: {len(a['photos'])} photos, {made} file(s) (re)generated")
 
@@ -386,7 +386,7 @@ def prune_output(albums):
 def copy_static():
     dst = OUTPUT_DIR / "assets"
     if STATIC_DIR.is_dir():
-        shutil.copytree(STATIC_DIR, dst, dirs_exist_ok=True)
+        shutil.copytree(STATIC_DIR, dst, dirs_exist_ok=True, copy_function=shutil.copyfile)
     me = CONTEXT_DIR / "me.jpg"
     if me.exists():
         render(me, OUTPUT_DIR / "me.jpg", 1200, 1500, 85)
