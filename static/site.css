@@ -466,7 +466,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* Rij: flex-grow op verhouding geeft precies gelijke hoogtes */
 .blk-row .photo { flex: var(--r) 1 0; min-width: 0; }
 
-/* Paar: breed + smal (4:5), even hoog en strak tegen elkaar */
+/* Paar: twee fotos in eigen verhouding, even hoog en strak tegen elkaar */
 .blk-pair .photo { flex: var(--r) 1 0; min-width: 0; }
 .blk-pair.is-flip .photo:nth-child(1) { order: 2; }
 

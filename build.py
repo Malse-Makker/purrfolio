@@ -607,8 +607,8 @@ def build_index(albums):
 
 def album_layout(metas):
     """Speels ritme voor de albumpagina in plaats van gelijke rijen.
-    Blokken: een grote foto over de volle breedte, rijen van drie, en
-    verspringende paren (groot + klein, afwisselend links en rechts).
+    Blokken: een grote foto over de volle breedte, rijen van drie en
+    paren. Alles in de eigen verhouding: er wordt niets bijgesneden.
     Een 'feature' vraagt een liggende foto; anders wordt het een rij.
     Geeft [(soort, [indexen])] terug in leesvolgorde."""
     n = len(metas)
@@ -648,11 +648,9 @@ def build_album(a, prev_a, next_a):
         data.append({"full": f"/previews/{slug}/{name}", "orig": f"/photos/{slug}/{name}",
                      "alt": alt, "exif": exif_line(m)})
 
-    def tile(idx, sizes, shown=None):
-        """shown: weergave-verhouding in het raster (bijgesneden met
-        object-fit); de fotoviewer toont altijd de hele foto."""
+    def tile(idx, sizes):
         name, ratio, alt, i = tiles[idx]
-        return (f'<a class="photo" href="/previews/{slug}/{name}" style="--r:{shown or ratio}" data-n="{i + 1:02d}">'
+        return (f'<a class="photo" href="/previews/{slug}/{name}" style="--r:{ratio}" data-n="{i + 1:02d}">'
                 f'<img class="fade" src="/grid/{slug}/{name}" '
                 f'srcset="/grid/{slug}/{name} {GRID_SIZE}w, /previews/{slug}/{name} {PREVIEW_SIZE}w" '
                 f'sizes="{sizes}" alt="{alt}" loading="{"eager" if i < 3 else "lazy"}" '
@@ -665,10 +663,10 @@ def build_album(a, prev_a, next_a):
             blocks_html.append(f'<div class="blk blk-feature reveal">{inner}</div>')
         elif kind.startswith("pair"):
             flip = " is-flip" if kind == "pair-flip" else ""
-            # breed (eigen verhouding) naast smal (4:5-uitsnede): even hoog,
-            # dus strak tegen elkaar zonder witte vlakken
-            inner = (tile(idxs[0], "(min-width: 760px) 62vw, 62vw")
-                     + tile(idxs[1], "(min-width: 760px) 34vw, 34vw", shown=0.8))
+            # twee foto's in hun eigen verhouding, even hoog en strak tegen
+            # elkaar: niets bijgesneden, geen witte vlakken
+            inner = (tile(idxs[0], "(min-width: 760px) 50vw, 50vw")
+                     + tile(idxs[1], "(min-width: 760px) 50vw, 50vw"))
             blocks_html.append(f'<div class="blk blk-pair{flip} reveal">{inner}</div>')
         else:
             inner = "".join(tile(j, "(min-width: 760px) 34vw, 50vw") for j in idxs)
