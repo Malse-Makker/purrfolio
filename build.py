@@ -344,6 +344,27 @@ def scan_albums():
 
 # --- Images ------------------------------------------------------------------
 
+DERIVED_FORMAT = "2"   # ophogen = alle verkleinde foto's eenmalig opnieuw maken
+
+
+def reset_derived_if_outdated():
+    """Builds van voor 2.0 maakten previews zonder EXIF-rotatie en op een
+    ander formaat. Die zouden als 'vers' blijven staan, dus bij een nieuw
+    formaat de afgeleide mappen eenmalig weggooien (originelen blijven)."""
+    marker = OUTPUT_DIR / ".cache" / "format"
+    try:
+        if marker.read_text().strip() == DERIVED_FORMAT:
+            return
+    except OSError:
+        pass
+    for sub in ("previews", "grid", "thumbs", "covers"):
+        shutil.rmtree(OUTPUT_DIR / sub, ignore_errors=True)
+        ensure_dir(OUTPUT_DIR / sub)
+    ensure_dir(marker.parent)
+    marker.write_text(DERIVED_FORMAT)
+    print(f"[RESET]   derived images cleared for format {DERIVED_FORMAT}")
+
+
 def build_images(albums):
     for a in albums:
         slug = a["slug"]
@@ -722,6 +743,7 @@ def main():
 
     for sub in ("", "albums", "photos", "previews", "grid", "thumbs", "covers"):
         ensure_dir(OUTPUT_DIR / sub)
+    reset_derived_if_outdated()
     load_meta_cache()
 
     albums = scan_albums()

@@ -20,4 +20,4 @@ jobs:
           chmod 600 "$KEY_FILE"
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$KEY_FILE"
           ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ubuntu@makkers.net \
-            "cd /home/ubuntu/purrfolio && git pull origin main && bash build.sh && docker compose up -d --build --force-recreate"
+            "cd /home/ubuntu/purrfolio && git pull origin main && flock /tmp/micktures-rebuild.lock bash build.sh && docker compose up -d --build --force-recreate"
