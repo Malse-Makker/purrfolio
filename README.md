@@ -25,8 +25,8 @@ Rebuilds are incremental: resized images are only regenerated when the source ph
 ## Installation
 
 ```bash
-git clone https://github.com/Nijntje94/Purrfolio.git
-cd Purrfolio
+git clone https://github.com/Malse-Makker/purrfolio.git
+cd purrfolio
 cp .env.example .env
 nano .env
 ```
