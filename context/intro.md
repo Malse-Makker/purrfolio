@@ -1,1 +1,1 @@
-Photography by Mick: *animals*, nature, street and motion, mostly around Amersfoort, Netherlands.
+Hi, I'm Mick. I point my camera at animals, fast cars, night skies and anything else that won't sit still.

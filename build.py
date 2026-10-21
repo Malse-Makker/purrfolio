@@ -485,6 +485,43 @@ def album_meta_line(a) -> str:
     return f"{count} photo{'s' if count != 1 else ''} · {a['date_str']}"
 
 
+def mosaic_layout(n):
+    """Speelse mozaiek-indeling op een 12-koloms grid: groot/klein wisselt
+    af, zodat de homepage geen rijtje gelijke blokjes wordt. Geeft per album
+    (grid-column, grid-row, formaat) terug. Rijen zijn ~120 px hoog.
+
+      blok A: groot links (7 kol, 4 rijen) + twee kleine rechts
+      blok B: twee halve tegels naast elkaar (6 kol, 3 rijen)
+      blok C: gespiegeld A, groot rechts
+    Rest van 1 album: brede tegel; rest van 2: blok B.
+    """
+    out, row, i, blocks = [], 1, 0, "ABCB"
+    b = 0
+    while i < n:
+        left = n - i
+        kind = blocks[b % len(blocks)]
+        if left == 1:
+            out.append((f"1 / span 12", f"{row} / span 3", "lg"))
+            i, row = i + 1, row + 3
+        elif left == 2 or kind == "B":
+            out += [(f"1 / span 6", f"{row} / span 3", "md"),
+                    (f"7 / span 6", f"{row} / span 3", "md")]
+            i, row = i + 2, row + 3
+        elif kind == "A":
+            out += [(f"1 / span 7", f"{row} / span 4", "lg"),
+                    (f"8 / span 5", f"{row} / span 2", "sm"),
+                    (f"8 / span 5", f"{row + 2} / span 2", "sm")]
+            i, row = i + 3, row + 4
+        else:                                   # C: groot rechts
+            # kleine eerst, zodat de nummers links-naar-rechts oplopen
+            out += [(f"1 / span 5", f"{row} / span 2", "sm"),
+                    (f"1 / span 5", f"{row + 2} / span 2", "sm"),
+                    (f"6 / span 7", f"{row} / span 4", "lg")]
+            i, row = i + 3, row + 4
+        b += 1
+    return out[:n]
+
+
 def build_index(albums):
     if not albums:
         body = '<div class="wrap album-head"><h1 class="album-title">No albums yet</h1></div>'
@@ -497,20 +534,20 @@ def build_index(albums):
     intro = re.sub(r"^<p>|</p>$", "", intro.strip())
 
     cards = []
-    for i, a in enumerate(albums, start=1):
-        pos = f' style="object-position:{a["thumb_pos"]}"' if a["thumb_pos"] != "center" else ""
+    for i, (a, (col, row, size)) in enumerate(zip(albums, mosaic_layout(len(albums))), start=1):
+        pos = f";object-position:{a['thumb_pos']}" if a["thumb_pos"] != "center" else ""
+        sizes = {"lg": "(min-width: 760px) 60vw, 100vw",
+                 "md": "(min-width: 760px) 50vw, 100vw",
+                 "sm": "(min-width: 760px) 42vw, 100vw"}[size]
         cards.append(f"""
-  <a class="card" href="/albums/{a['slug']}.html">
-    <div class="card-media">
-      <img class="fade" src="/covers/{a['slug']}/cover-800.jpg" srcset="{cover_srcset(a['slug'])}"
-           sizes="(min-width: 960px) 45vw, 100vw" alt="{a['name']}" loading="{'eager' if i <= 2 else 'lazy'}"
-           decoding="async" width="800" height="533"{pos}>
-    </div>
-    <div class="card-body">
-      <span class="card-index">{i:02d}</span>
-      <h3 class="card-title">{a['name']}</h3>
-      <p class="card-meta">{album_meta_line(a)}</p>
-    </div>
+  <a class="tile tile-{size}" href="/albums/{a['slug']}.html" style="--col:{col};--row:{row}">
+    <img class="fade" src="/covers/{a['slug']}/cover-800.jpg" srcset="{cover_srcset(a['slug'])}"
+         sizes="{sizes}" alt="" loading="{'eager' if i <= 3 else 'lazy'}" decoding="async" style="{pos}">
+    <span class="tile-info">
+      <span class="tile-kicker">{i:02d} · {a['date_str']}</span>
+      <span class="tile-title">{a['name']}</span>
+      <span class="tile-meta">{len(a['photos'])} photos <i class="fa-solid fa-arrow-right"></i></span>
+    </span>
   </a>""")
 
     n = len(albums)
@@ -536,7 +573,7 @@ def build_index(albums):
       <h2 class="section-title" id="albums-title">Albums</h2>
       <span class="kicker">{n} album{'s' if n != 1 else ''}</span>
     </div>
-    <div class="albums">{''.join(cards)}
+    <div class="mosaic">{''.join(cards)}
     </div>
   </section>
 </div>"""
