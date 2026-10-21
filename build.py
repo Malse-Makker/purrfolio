@@ -605,27 +605,77 @@ def build_index(albums):
     print("[BUILD] index.html")
 
 
+def album_layout(metas):
+    """Speels ritme voor de albumpagina in plaats van gelijke rijen.
+    Blokken: een grote foto over de volle breedte, rijen van drie, en
+    verspringende paren (groot + klein, afwisselend links en rechts).
+    Een 'feature' vraagt een liggende foto; anders wordt het een rij.
+    Geeft [(soort, [indexen])] terug in leesvolgorde."""
+    n = len(metas)
+    ratio = [m["w"] / m["h"] if m["h"] else 1.5 for m in metas]
+    cycle = ["feature", "row", "pair", "row", "pair-flip"]
+    blocks, i, c = [], 0, 0
+    while i < n:
+        kind = cycle[c % len(cycle)]
+        left = n - i
+        if kind == "feature" and ratio[i] < 1.25:
+            kind = "row"
+        if kind.startswith("pair") and left < 2:
+            kind = "feature" if ratio[i] >= 1.25 else "row"
+        if kind == "feature":
+            blocks.append((kind, [i]))
+            i += 1
+        elif kind.startswith("pair"):
+            blocks.append((kind, [i, i + 1]))
+            i += 2
+        else:
+            take = 3 if left != 4 else 2       # 4 over: liever 2+2 dan 3+1
+            take = min(take, left)
+            blocks.append(("row", list(range(i, i + take))))
+            i += take
+        c += 1
+    return blocks
+
+
 def build_album(a, prev_a, next_a):
     slug = a["slug"]
-    tiles, data = [], []
+    data, tiles = [], []
     for i, (p, m) in enumerate(zip(a["photos"], a["metas"])):
         name = quote(p.name)
         ratio = round(m["w"] / m["h"], 4) if m["h"] else 1.5
         alt = f"{a['name']}, photo {i + 1}"
-        tiles.append(
-            f'<a class="photo" href="/previews/{slug}/{name}" style="--r:{ratio}">'
-            f'<img class="fade" src="/grid/{slug}/{name}" '
-            f'srcset="/grid/{slug}/{name} {GRID_SIZE}w, /previews/{slug}/{name} {PREVIEW_SIZE}w" '
-            f'sizes="(min-width: 900px) 40vw, 100vw" alt="{alt}" '
-            f'loading="{"eager" if i < 4 else "lazy"}" decoding="async"></a>')
+        tiles.append((name, ratio, alt, i))
         data.append({"full": f"/previews/{slug}/{name}", "orig": f"/photos/{slug}/{name}",
                      "alt": alt, "exif": exif_line(m)})
+
+    def tile(idx, sizes):
+        name, ratio, alt, i = tiles[idx]
+        return (f'<a class="photo" href="/previews/{slug}/{name}" style="--r:{ratio}" data-n="{i + 1:02d}">'
+                f'<img class="fade" src="/grid/{slug}/{name}" '
+                f'srcset="/grid/{slug}/{name} {GRID_SIZE}w, /previews/{slug}/{name} {PREVIEW_SIZE}w" '
+                f'sizes="{sizes}" alt="{alt}" loading="{"eager" if i < 3 else "lazy"}" '
+                f'decoding="async"></a>')
+
+    blocks_html = []
+    for kind, idxs in album_layout(a["metas"]):
+        if kind == "feature":
+            inner = tile(idxs[0], "(min-width: 900px) 90vw, 100vw")
+            blocks_html.append(f'<div class="blk blk-feature reveal">{inner}</div>')
+        elif kind.startswith("pair"):
+            flip = " is-flip" if kind == "pair-flip" else ""
+            inner = (tile(idxs[0], "(min-width: 760px) 60vw, 100vw")
+                     + tile(idxs[1], "(min-width: 760px) 36vw, 100vw"))
+            blocks_html.append(f'<div class="blk blk-pair{flip} reveal">{inner}</div>')
+        else:
+            inner = "".join(tile(j, "(min-width: 760px) 34vw, 50vw") for j in idxs)
+            blocks_html.append(f'<div class="blk blk-row reveal">{inner}</div>')
 
     meta = [f'<span><i class="fa-regular fa-calendar"></i>{a["date_str"]}</span>',
             f'<span><i class="fa-regular fa-images"></i>{len(a["photos"])} photos</span>']
     if a["camera"]:
         meta.append(f'<span><i class="fa-solid fa-camera"></i>{escape(a["camera"])}</span>')
-    notes = f'<div class="prose">{a["notes"]}</div>' if a["notes"] else ""
+    notes = f'<div class="wrap album-intro reveal"><div class="prose">{a["notes"]}</div></div>' if a["notes"] else ""
+    pos = f' style="object-position:{a["thumb_pos"]}"' if a["thumb_pos"] != "center" else ""
 
     def nav_link(other, cls, label):
         if not other:
@@ -637,15 +687,18 @@ def build_album(a, prev_a, next_a):
         return f'<a class="{cls}" href="/albums/{other["slug"]}.html">{inner}</a>'
 
     body = f"""
+<section class="hero hero-album">
+  <img class="fade" src="/covers/{slug}/cover-1600.jpg" srcset="{cover_srcset(slug)}"
+       sizes="100vw" alt="" fetchpriority="high"{pos}>
+  <div class="hero-content wrap">
+    <a class="back back-light" href="/"><i class="fa-solid fa-arrow-left"></i> All albums</a>
+    <h1 class="hero-title">{a['name']}</h1>
+    <div class="album-meta album-meta-light">{''.join(meta)}</div>
+  </div>
+</section>
+{notes}
 <div class="wrap">
-  <header class="album-head">
-    <a class="back" href="/"><i class="fa-solid fa-arrow-left"></i> All albums</a>
-    <h1 class="album-title">{a['name']}</h1>
-    <div class="album-meta">{''.join(meta)}</div>
-    {notes}
-  </header>
-
-  <div class="photos">{''.join(tiles)}</div>
+  <div class="photos">{''.join(blocks_html)}</div>
 
   <nav class="album-nav" aria-label="More albums">
     {nav_link(prev_a, "is-prev", "Newer")}
@@ -675,7 +728,7 @@ def build_album(a, prev_a, next_a):
     data_json = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     out = OUTPUT_DIR / "albums" / f"{slug}.html"
     out.write_text(base_html(
-        a["name"], "work", body, data_json=data_json,
+        a["name"], "work", body, data_json=data_json, body_class="has-hero",
         description=f"{a['name']}: {album_meta_line(a)}. Photography by {SITE_AUTHOR}.",
         image=f"/covers/{slug}/cover-1600.jpg"))
     print(f"[BUILD] albums/{slug}.html")

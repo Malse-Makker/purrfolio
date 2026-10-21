@@ -24,6 +24,19 @@
     }
   });
 
+  /* ── Blokken zacht in beeld laten schuiven bij het scrollen ──────────── */
+  var reveals = document.querySelectorAll(".reveal");
+  if ("IntersectionObserver" in window && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("is-in"); io.unobserve(en.target); }
+      });
+    }, { rootMargin: "0px 0px -8% 0px" });
+    reveals.forEach(function (el) { io.observe(el); });
+  } else {
+    reveals.forEach(function (el) { el.classList.add("is-in"); });
+  }
+
   /* ── Nav wordt dicht zodra je voorbij de hero scrolt ──────────────────── */
   var nav = document.querySelector(".nav");
   var hero = document.querySelector(".hero");

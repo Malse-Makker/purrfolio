@@ -55,7 +55,6 @@
   --gutter: clamp(16px, 4vw, 56px);
   --max: 1440px;
   --nav-h: 64px;
-  --row-h: 220px;          /* doelhoogte van een rij in het album */
   --ease: cubic-bezier(.2, .7, .2, 1);
 }
 
@@ -420,20 +419,20 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 .prose ul { padding-left: 1.2em; margin: .6em 0; }
 .prose hr { border: 0; border-top: 1px solid var(--line); margin: 1.6em 0; }
 
-/* Justified grid: elke foto groeit naar verhouding, rijen lopen gelijk */
+/* Albumritme (indeling in build.py: album_layout): grote foto's over de
+   volle breedte, rijen van drie en verspringende paren. */
 .photos {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding-bottom: clamp(48px, 8vw, 96px);
+  flex-direction: column;
+  gap: clamp(10px, 1.6vw, 22px);
+  padding: clamp(24px, 4vw, 56px) 0 clamp(56px, 9vw, 112px);
 }
-.photos::after { content: ""; flex-grow: 999999; }
+.blk { display: flex; gap: clamp(10px, 1.6vw, 22px); }
 .photo {
   position: relative;
-  flex-grow: calc(var(--r) * 100);   /* som altijd > 1, anders vult een rij niet */
-  flex-basis: calc(var(--r) * var(--row-h));
+  display: block;
   overflow: hidden;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--bg-sunk);
   cursor: zoom-in;
 }
@@ -442,9 +441,59 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   height: auto;
   aspect-ratio: var(--r);
   object-fit: cover;
-  transition: opacity .6s var(--ease), transform 1s var(--ease);
+  transition: opacity .6s var(--ease), transform 1.2s var(--ease);
 }
-.photo:hover img { transform: scale(1.025); }
+.photo:hover img { transform: scale(1.03); }
+.photo::after {                              /* fotonummer bij hover */
+  content: attr(data-n);
+  position: absolute;
+  left: 12px; bottom: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .6);
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity .3s, transform .3s var(--ease);
+}
+.photo:hover::after { opacity: 1; transform: none; }
+
+/* Grote foto: volle breedte, maar nooit hoger dan het scherm */
+.blk-feature { justify-content: center; }
+.blk-feature .photo { width: min(100%, calc(84vh * var(--r))); }
+
+/* Rij: flex-grow op verhouding geeft precies gelijke hoogtes */
+.blk-row .photo { flex: var(--r) 1 0; min-width: 0; }
+
+/* Verspringend paar: groot + klein, de kleine zakt iets naar beneden */
+.blk-pair { display: grid; grid-template-columns: 7fr 4fr; align-items: start; }
+.blk-pair .photo:nth-child(2) { margin-top: clamp(32px, 9vw, 140px); }
+.blk-pair.is-flip { grid-template-columns: 4fr 7fr; }
+.blk-pair.is-flip .photo:nth-child(1) { order: 2; }
+.blk-pair.is-flip .photo:nth-child(2) { order: 1; }
+
+/* Zacht in beeld schuiven bij het scrollen (JS zet .is-in) */
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s var(--ease), transform .9s var(--ease); }
+.reveal.is-in { opacity: 1; transform: none; }
+.no-js .reveal { opacity: 1; transform: none; }
+
+/* Album-hero: iets lager dan op de homepage */
+.hero-album { height: min(78svh, 820px); min-height: 460px; }
+.back-light { color: rgba(255, 255, 255, .78); margin-bottom: 18px; }
+.back-light:hover { color: #fff; }
+.album-meta-light { color: rgba(255, 255, 255, .82); }
+.album-meta-light i { color: rgba(255, 255, 255, .6); }
+.album-intro { padding-top: clamp(40px, 6vw, 72px); }
+.album-intro .prose { margin-top: 0; font-size: 18px; }
+
+@media (max-width: 760px) {
+  .blk-row { flex-wrap: wrap; }
+  .blk-row .photo { flex: var(--r) 1 calc(var(--r) * 100px); }   /* 2 per regel */
+  .blk-pair, .blk-pair.is-flip { grid-template-columns: 1fr; }
+  .blk-pair .photo:nth-child(2) { margin-top: 0; width: 78%; justify-self: end; }
+  .blk-pair.is-flip .photo:nth-child(2) { justify-self: start; }
+}
 
 /* Vorige / volgende album */
 .album-nav {
@@ -596,9 +645,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .about-photo { position: static; max-width: 420px; }
 }
 @media (max-width: 600px) {
-  :root { --row-h: 190px; --nav-h: 58px; }
+  :root { --nav-h: 58px; }
   .nav-link.hide-sm { display: none; }
-  .photos { gap: 4px; }
   .album-nav { grid-template-columns: 1fr; }
   .album-nav .is-next { justify-content: flex-start; text-align: left; flex-direction: row-reverse; }
   .album-nav img { width: 72px; }
@@ -609,7 +657,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
-@media (min-width: 1300px) { :root { --row-h: 250px; } }
 
 /* About zonder portret: titel in de linkerkolom */
 .about-side { position: sticky; top: calc(var(--nav-h) + 24px); }
