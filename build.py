@@ -648,9 +648,11 @@ def build_album(a, prev_a, next_a):
         data.append({"full": f"/previews/{slug}/{name}", "orig": f"/photos/{slug}/{name}",
                      "alt": alt, "exif": exif_line(m)})
 
-    def tile(idx, sizes):
+    def tile(idx, sizes, shown=None):
+        """shown: weergave-verhouding in het raster (bijgesneden met
+        object-fit); de fotoviewer toont altijd de hele foto."""
         name, ratio, alt, i = tiles[idx]
-        return (f'<a class="photo" href="/previews/{slug}/{name}" style="--r:{ratio}" data-n="{i + 1:02d}">'
+        return (f'<a class="photo" href="/previews/{slug}/{name}" style="--r:{shown or ratio}" data-n="{i + 1:02d}">'
                 f'<img class="fade" src="/grid/{slug}/{name}" '
                 f'srcset="/grid/{slug}/{name} {GRID_SIZE}w, /previews/{slug}/{name} {PREVIEW_SIZE}w" '
                 f'sizes="{sizes}" alt="{alt}" loading="{"eager" if i < 3 else "lazy"}" '
@@ -663,8 +665,10 @@ def build_album(a, prev_a, next_a):
             blocks_html.append(f'<div class="blk blk-feature reveal">{inner}</div>')
         elif kind.startswith("pair"):
             flip = " is-flip" if kind == "pair-flip" else ""
-            inner = (tile(idxs[0], "(min-width: 760px) 60vw, 100vw")
-                     + tile(idxs[1], "(min-width: 760px) 36vw, 100vw"))
+            # breed (eigen verhouding) naast smal (4:5-uitsnede): even hoog,
+            # dus strak tegen elkaar zonder witte vlakken
+            inner = (tile(idxs[0], "(min-width: 760px) 62vw, 62vw")
+                     + tile(idxs[1], "(min-width: 760px) 34vw, 34vw", shown=0.8))
             blocks_html.append(f'<div class="blk blk-pair{flip} reveal">{inner}</div>')
         else:
             inner = "".join(tile(j, "(min-width: 760px) 34vw, 50vw") for j in idxs)
@@ -674,8 +678,7 @@ def build_album(a, prev_a, next_a):
             f'<span><i class="fa-regular fa-images"></i>{len(a["photos"])} photos</span>']
     if a["camera"]:
         meta.append(f'<span><i class="fa-solid fa-camera"></i>{escape(a["camera"])}</span>')
-    notes = f'<div class="wrap album-intro reveal"><div class="prose">{a["notes"]}</div></div>' if a["notes"] else ""
-    pos = f' style="object-position:{a["thumb_pos"]}"' if a["thumb_pos"] != "center" else ""
+    notes = f'<div class="prose">{a["notes"]}</div>' if a["notes"] else ""
 
     def nav_link(other, cls, label):
         if not other:
@@ -687,17 +690,17 @@ def build_album(a, prev_a, next_a):
         return f'<a class="{cls}" href="/albums/{other["slug"]}.html">{inner}</a>'
 
     body = f"""
-<section class="hero hero-album">
-  <img class="fade" src="/covers/{slug}/cover-1600.jpg" srcset="{cover_srcset(slug)}"
-       sizes="100vw" alt="" fetchpriority="high"{pos}>
-  <div class="hero-content wrap">
-    <a class="back back-light" href="/"><i class="fa-solid fa-arrow-left"></i> All albums</a>
-    <h1 class="hero-title">{a['name']}</h1>
-    <div class="album-meta album-meta-light">{''.join(meta)}</div>
-  </div>
-</section>
-{notes}
 <div class="wrap">
+  <header class="album-head">
+    <a class="back" href="/"><i class="fa-solid fa-arrow-left"></i> All albums</a>
+    <div class="album-head-grid">
+      <h1 class="album-title">{a['name']}</h1>
+      <div class="album-head-side">
+        <div class="album-meta">{''.join(meta)}</div>
+        {notes}
+      </div>
+    </div>
+  </header>
   <div class="photos">{''.join(blocks_html)}</div>
 
   <nav class="album-nav" aria-label="More albums">
@@ -728,7 +731,7 @@ def build_album(a, prev_a, next_a):
     data_json = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
     out = OUTPUT_DIR / "albums" / f"{slug}.html"
     out.write_text(base_html(
-        a["name"], "work", body, data_json=data_json, body_class="has-hero",
+        a["name"], "work", body, data_json=data_json,
         description=f"{a['name']}: {album_meta_line(a)}. Photography by {SITE_AUTHOR}.",
         image=f"/covers/{slug}/cover-1600.jpg"))
     print(f"[BUILD] albums/{slug}.html")

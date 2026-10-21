@@ -466,33 +466,32 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* Rij: flex-grow op verhouding geeft precies gelijke hoogtes */
 .blk-row .photo { flex: var(--r) 1 0; min-width: 0; }
 
-/* Verspringend paar: groot + klein, de kleine zakt iets naar beneden */
-.blk-pair { display: grid; grid-template-columns: 7fr 4fr; align-items: start; }
-.blk-pair .photo:nth-child(2) { margin-top: clamp(32px, 9vw, 140px); }
-.blk-pair.is-flip { grid-template-columns: 4fr 7fr; }
+/* Paar: breed + smal (4:5), even hoog en strak tegen elkaar */
+.blk-pair .photo { flex: var(--r) 1 0; min-width: 0; }
 .blk-pair.is-flip .photo:nth-child(1) { order: 2; }
-.blk-pair.is-flip .photo:nth-child(2) { order: 1; }
 
 /* Zacht in beeld schuiven bij het scrollen (JS zet .is-in) */
 .reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s var(--ease), transform .9s var(--ease); }
 .reveal.is-in { opacity: 1; transform: none; }
 .no-js .reveal { opacity: 1; transform: none; }
 
-/* Album-hero: iets lager dan op de homepage */
-.hero-album { height: min(78svh, 820px); min-height: 460px; }
-.back-light { color: rgba(255, 255, 255, .78); margin-bottom: 18px; }
-.back-light:hover { color: #fff; }
-.album-meta-light { color: rgba(255, 255, 255, .82); }
-.album-meta-light i { color: rgba(255, 255, 255, .6); }
-.album-intro { padding-top: clamp(40px, 6vw, 72px); }
-.album-intro .prose { margin-top: 0; font-size: 18px; }
+/* Titelkop: grote titel links, datum/camera en notities rechts */
+.album-head-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 4fr);
+  gap: 24px 48px;
+  align-items: end;
+}
+.album-head-side .album-meta { margin-top: 0; flex-direction: column; gap: 8px; }
+.album-head-side .prose { margin-top: 18px; font-size: 16px; }
+@media (max-width: 860px) {
+  .album-head-grid { grid-template-columns: 1fr; }
+  .album-head-side .album-meta { flex-direction: row; flex-wrap: wrap; gap: 8px 22px; }
+}
 
 @media (max-width: 760px) {
   .blk-row { flex-wrap: wrap; }
   .blk-row .photo { flex: var(--r) 1 calc(var(--r) * 100px); }   /* 2 per regel */
-  .blk-pair, .blk-pair.is-flip { grid-template-columns: 1fr; }
-  .blk-pair .photo:nth-child(2) { margin-top: 0; width: 78%; justify-self: end; }
-  .blk-pair.is-flip .photo:nth-child(2) { justify-self: start; }
 }
 
 /* Vorige / volgende album */
