@@ -2,13 +2,21 @@
 
 A minimal, self-hosted photography portfolio. Drop a folder of photos on your server, run one command, and the site builds itself.
 
+Since 2.0 it looks like a proper portfolio: a full-screen hero with the latest album, an editorial album grid, justified photo rows, a full-screen viewer with EXIF details, and Catppuccin light/dark themes with self-hosted Inter and Fraunces fonts.
+
 No CMS, no database, no framework. A Python script scans a directory of photo albums and outputs plain HTML served by Nginx.
 
 ## How it works
 
-`build.py` scans `PHOTOS_DIR` for subdirectories. Each subdirectory becomes an album on the gallery page. The first photo in each album is used as the cover thumbnail. Running `./build.sh` builds the Docker image and runs the generator, which writes the site into `output/`. Nginx picks that up immediately.
+`build.py` scans `PHOTOS_DIR` for subdirectories. Each subdirectory becomes an album. `cover.jpg` (or the first photo) is the cover; photos are shown in filename order. Running `./build.sh` builds the Docker image and runs the generator, which writes the site into `output/`. Nginx picks that up immediately.
 
-The site has two pages: a gallery with a masonry layout and a "My gear & me" page. There is a theme switcher in the nav for light, dark, and Catppuccin themes.
+Pages:
+
+- **Home** — full-screen hero with the newest album, a short intro (`context/intro.md`) and all albums as cards
+- **Album** — title, date, camera and notes, then the photos in justified rows; click for a full-screen viewer with swipe, keyboard navigation, EXIF (camera, lens, focal length, aperture, shutter, ISO) and a link to the original. `#photo-5` links straight to a photo
+- **About & gear** — `context/about.md` and `context/gear.md`, with `context/me.jpg` as portrait if present
+
+Rebuilds are incremental: resized images are only regenerated when the source photo is newer, and EXIF is cached in `output/.cache/meta.json`. A rebuild without changes takes well under a second. Albums that disappear from `PHOTOS_DIR` are removed from the site.
 
 ## Requirements
 
@@ -46,12 +54,16 @@ The site is available on port 8081.
 ```
 Purrfolio/
 ├── context/
+│   ├── intro.md          # one-line intro on the homepage
 │   ├── about.md          # your bio shown on the gear page
 │   ├── gear.md           # your gear list
 │   └── me.jpg            # your photo shown next to the bio (optional)
 ├── output/               # generated site, served by Nginx (do not edit)
 ├── build.py              # the generator
-├── build.sh              # run this to rebuild the site
+├── build.sh              # run this to rebuild the site (Docker)
+├── preview.sh            # build + serve locally on http://localhost:8090
+├── static/               # site.css, site.js, fonts (copied to output/assets)
+├── tools/fetch-sample.sh # copy downscaled real albums from the server for previews
 ├── docker-compose.yml
 ├── nginx.conf
 ├── Dockerfile
@@ -80,7 +92,16 @@ photos/
     └── IMG_002.jpg
 ```
 
-Supported Markdown: headings (`##`, `###`), paragraphs, `**bold**`, `*italic*`, and `- lists`.
+Supported Markdown: headings (`##`, `###`), paragraphs, `**bold**`, `*italic*`, links and `- lists`.
+
+Optional meta lines in `notes.md` (removed from the text):
+
+```
+title: Perseids 2026          # display name, default: folder name with dashes as spaces
+date: 12-08-2026              # default: EXIF date of the photos, then the folder date
+camera: Nikon Z6 II           # default: from EXIF
+thumb_position: top           # crop focus of the cover: top|center|bottom|left|right
+```
 
 Example:
 
@@ -102,6 +123,15 @@ Edit the files in the `context/` folder:
 - `context/me.jpg` — your photo, shown next to the bio (optional, any name works as long as it is `me.jpg`)
 
 Run `./build.sh` after any change.
+
+## Previewing locally
+
+```bash
+./tools/fetch-sample.sh   # once: downscaled copy of the real albums (~80 MB)
+./preview.sh              # build into preview-output/ and serve on http://localhost:8090
+```
+
+`preview.sh` uses a local Python with Pillow, `nix-shell`, or the Docker image, whichever is available.
 
 ## Uploading photos from another machine
 
