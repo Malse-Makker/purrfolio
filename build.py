@@ -17,6 +17,7 @@ Album folder contract (unchanged, SwipeShot exports rely on it):
         title: Display name (default: folder name, dashes become spaces)
 """
 
+import functools
 import hashlib
 import json
 import os
@@ -408,6 +409,7 @@ def scan_albums():
 DERIVED_FORMAT = "3"   # bump = regenerate every derived image once
 
 
+@functools.cache
 def derived_format() -> str:
     """Format marker. Includes the watermark, so a new mark (or switching it
     off) regenerates every image without a manual bump."""
@@ -480,8 +482,20 @@ def copy_static():
 
 # --- HTML --------------------------------------------------------------------
 
-def cover_srcset(slug: str) -> str:
-    return ", ".join(f"/covers/{slug}/cover-{s}.jpg {s}w" for s in COVER_SIZES)
+def bust(src: Path) -> str:
+    """Cache-busting query for a derived image. Images are cached for 30 days,
+    so the URL has to change whenever the source photo or the derived format
+    (size, watermark) does, or browsers keep showing the old version."""
+    key = f"{derived_format()}:{src.stat().st_mtime_ns}"
+    return "?v=" + hashlib.sha1(key.encode()).hexdigest()[:10]
+
+
+def cover_url(a, size: int) -> str:
+    return f"/covers/{a['slug']}/cover-{size}.jpg{bust(a['cover'])}"
+
+
+def cover_srcset(a) -> str:
+    return ", ".join(f"{cover_url(a, s)} {s}w" for s in COVER_SIZES)
 
 
 def nav_html(active: str) -> str:
@@ -628,7 +642,7 @@ def build_index(albums):
                  "sm": "(min-width: 760px) 42vw, 100vw"}[size]
         cards.append(f"""
   <a class="tile tile-{size}" href="/albums/{a['slug']}.html" style="--col:{col};--row:{row}">
-    <img class="fade" src="/covers/{a['slug']}/cover-800.jpg" srcset="{cover_srcset(a['slug'])}"
+    <img class="fade" src="{cover_url(a, 800)}" srcset="{cover_srcset(a)}"
          sizes="{sizes}" alt="" loading="{'eager' if i <= 3 else 'lazy'}" decoding="async" style="{pos}">
     <span class="tile-info">
       <span class="tile-kicker">{i:02d} · {a['date_str']}</span>
@@ -640,7 +654,7 @@ def build_index(albums):
     n = len(albums)
     body = f"""
 <section class="hero">
-  <img class="fade" src="/covers/{hero['slug']}/cover-1600.jpg" srcset="{cover_srcset(hero['slug'])}"
+  <img class="fade" src="{cover_url(hero, 1600)}" srcset="{cover_srcset(hero)}"
        sizes="100vw" alt="{hero['name']}" fetchpriority="high"{hero_pos}>
   <div class="hero-content wrap">
     <p class="kicker">Latest album · {hero['date_str']}</p>
@@ -667,7 +681,7 @@ def build_index(albums):
     (OUTPUT_DIR / "index.html").write_text(base_html(
         SITE_TITLE, "work", body, body_class="has-hero",
         description=f"Photography by {SITE_AUTHOR}: {n} albums.",
-        image=f"/covers/{hero['slug']}/cover-1600.jpg"))
+        image=cover_url(hero, 1600)))
     print("[BUILD] index.html")
 
 
@@ -707,7 +721,7 @@ def build_album(a, prev_a, next_a):
     slug = a["slug"]
     data, tiles = [], []
     for i, (p, m) in enumerate(zip(a["photos"], a["metas"])):
-        name = quote(p.name)
+        name = quote(p.name) + bust(p)
         ratio = round(m["w"] / m["h"], 4) if m["h"] else 1.5
         alt = f"{a['name']}, photo {i + 1}"
         tiles.append((name, ratio, alt, i))
@@ -747,7 +761,7 @@ def build_album(a, prev_a, next_a):
     def nav_link(other, cls, label):
         if not other:
             return "<span></span>"
-        img = f'<img src="/covers/{other["slug"]}/cover-800.jpg" alt="" loading="lazy">'
+        img = f'<img src="{cover_url(other, 800)}" alt="" loading="lazy">'
         text = (f'<span><span class="kicker">{label}</span>'
                 f'<span class="album-nav-title">{other["name"]}</span></span>')
         inner = f"{img}{text}" if cls == "is-prev" else f"{text}{img}"
@@ -797,7 +811,7 @@ def build_album(a, prev_a, next_a):
     out.write_text(base_html(
         a["name"], "work", body, data_json=data_json,
         description=f"{a['name']}: {album_meta_line(a)}. Photography by {SITE_AUTHOR}.",
-        image=f"/covers/{slug}/cover-1600.jpg"))
+        image=cover_url(a, 1600)))
     print(f"[BUILD] albums/{slug}.html")
 
 
