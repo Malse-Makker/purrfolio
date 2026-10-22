@@ -124,6 +124,12 @@ Edit the files in the `context/` folder:
 
 Run `./build.sh` after any change.
 
+## Watermark
+
+Every photo inside an album (grid, full-screen viewer and the original download) gets `brand/watermark.png` in white at 60% opacity, centred at the bottom, about 15% of the photo's long side wide. Album covers on the home page stay clean. The source photos in `PHOTOS_DIR` are never changed; the originals offered for download are watermarked copies that keep their EXIF.
+
+To change the mark, replace `brand/watermark.png` (white on transparent) and rebuild: the build notices the new file and regenerates every image once. Set `WATERMARK` to a path that does not exist to switch it off.
+
 ## Previewing locally
 
 ```bash
@@ -153,6 +159,7 @@ Add a new proxy host pointing to the `purrfolio-nginx` container on port 80. Ena
 | PHOTOS_DIR     | Absolute path to the folder containing your albums      |
 | OUTPUT_DIR     | Path where the generated site is written                |
 | INSTAGRAM_URL  | Full Instagram URL, shown in the footer (optional)      |
+| WATERMARK      | Watermark image (default `brand/watermark.png`)         |
 
 ## License
 

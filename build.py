@@ -17,6 +17,7 @@ Album folder contract (unchanged, SwipeShot exports rely on it):
         title: Display name (default: folder name, dashes become spaces)
 """
 
+import hashlib
 import json
 import os
 import re
@@ -28,7 +29,7 @@ from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 # --- Configuration -----------------------------------------------------------
 
@@ -46,6 +47,13 @@ IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 GRID_SIZE    = 1000    # album grid
 PREVIEW_SIZE = 2000    # lightbox
 COVER_SIZES  = (800, 1600, 2400)   # album cards + homepage hero
+
+# Watermark on every photo shown in an album (grid, lightbox, original
+# download). Covers stay clean: they are cropped by CSS and carry the title.
+# Point WATERMARK at a missing file to switch it off.
+WATERMARK    = Path(os.environ.get("WATERMARK", Path(__file__).parent / "brand" / "watermark.png"))
+WM_WIDTH     = 0.15    # share of the photo's long side
+WM_OPACITY   = 0.6
 
 VERSION = (Path(__file__).parent / "VERSION").read_text().strip()
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -96,7 +104,35 @@ def is_fresh(src: Path, dst: Path) -> bool:
         return False
 
 
-def render(src: Path, dst: Path, max_w: int, max_h: int, quality: int):
+_watermark = None   # alpha mask, loaded on first use; False when switched off
+
+
+def watermark_mask():
+    global _watermark
+    if _watermark is None:
+        _watermark = Image.open(WATERMARK).getchannel("A") if WATERMARK.is_file() else False
+    return _watermark if _watermark is not False else None
+
+
+def apply_watermark(img):
+    """White mark, bottom centre, over a faint shadow so it stays readable on
+    light backgrounds."""
+    mask = watermark_mask()
+    if mask is None:
+        return img
+    w = min(round(max(img.size) * WM_WIDTH), round(img.width * 0.6))
+    h = round(mask.height * w / mask.width)
+    m = mask.resize((w, h), Image.LANCZOS)
+    x = (img.width - w) // 2
+    y = img.height - h - round(min(img.size) * 0.035)
+    off = max(1, w // 300)
+    shadow = m.point(lambda v: v // 4).filter(ImageFilter.GaussianBlur(max(1, w / 200)))
+    img.paste((0, 0, 0), (x + off, y + off), shadow)
+    img.paste((255, 255, 255), (x, y), m.point(lambda v: round(v * WM_OPACITY)))
+    return img
+
+
+def render(src: Path, dst: Path, max_w: int, max_h: int, quality: int, watermark=False):
     """Write a resized, EXIF-rotated JPEG. Atomic, so a crash never leaves a
     half-written image that would count as 'fresh'."""
     if is_fresh(src, dst):
@@ -105,8 +141,33 @@ def render(src: Path, dst: Path, max_w: int, max_h: int, quality: int):
     with local_copy(src) as tmp, Image.open(tmp) as img:
         img = ImageOps.exif_transpose(img).convert("RGB")
         img.thumbnail((max_w, max_h), Image.LANCZOS)
+        if watermark:
+            apply_watermark(img)
         part = dst.with_name(dst.name + ".part")
         img.save(part, "JPEG", quality=quality, optimize=True, progressive=True)
+        part.replace(dst)
+    return True
+
+
+def render_original(src: Path, dst: Path):
+    """Full-size download: a watermarked copy that keeps EXIF and the colour
+    profile, or a plain copy when the watermark is switched off."""
+    if is_fresh(src, dst):
+        return False
+    if watermark_mask() is None:
+        shutil.copyfile(src, dst)               # copy2 fails on rclone (xattrs)
+        return True
+    ensure_dir(dst.parent)
+    with local_copy(src) as tmp, Image.open(tmp) as img:
+        fmt, icc = img.format, img.info.get("icc_profile")
+        img = ImageOps.exif_transpose(img)      # also drops the orientation tag
+        exif = img.getexif()
+        img = apply_watermark(img.convert("RGB"))
+        part = dst.with_name(dst.name + ".part")
+        if fmt == "JPEG":
+            img.save(part, "JPEG", quality=95, optimize=True, exif=exif, icc_profile=icc)
+        else:
+            img.save(part, fmt or "PNG", icc_profile=icc)
         part.replace(dst)
     return True
 
@@ -344,25 +405,33 @@ def scan_albums():
 
 # --- Images ------------------------------------------------------------------
 
-DERIVED_FORMAT = "2"   # ophogen = alle verkleinde foto's eenmalig opnieuw maken
+DERIVED_FORMAT = "3"   # bump = regenerate every derived image once
+
+
+def derived_format() -> str:
+    """Format marker. Includes the watermark, so a new mark (or switching it
+    off) regenerates every image without a manual bump."""
+    mark = hashlib.sha256(WATERMARK.read_bytes()).hexdigest()[:12] if WATERMARK.is_file() else "none"
+    return f"{DERIVED_FORMAT}-{mark}"
 
 
 def reset_derived_if_outdated():
-    """Builds van voor 2.0 maakten previews zonder EXIF-rotatie en op een
-    ander formaat. Die zouden als 'vers' blijven staan, dus bij een nieuw
-    formaat de afgeleide mappen eenmalig weggooien (originelen blijven)."""
+    """Derived images only get rebuilt when their source changes, so a new
+    format (size, rotation, watermark) would leave old ones looking 'fresh'.
+    Clear the derived folders once instead; the source photos stay untouched."""
+    fmt = derived_format()
     marker = OUTPUT_DIR / ".cache" / "format"
     try:
-        if marker.read_text().strip() == DERIVED_FORMAT:
+        if marker.read_text().strip() == fmt:
             return
     except OSError:
         pass
-    for sub in ("previews", "grid", "thumbs", "covers"):
+    for sub in ("photos", "previews", "grid", "thumbs", "covers"):
         shutil.rmtree(OUTPUT_DIR / sub, ignore_errors=True)
         ensure_dir(OUTPUT_DIR / sub)
     ensure_dir(marker.parent)
-    marker.write_text(DERIVED_FORMAT)
-    print(f"[RESET]   derived images cleared for format {DERIVED_FORMAT}")
+    marker.write_text(fmt)
+    print(f"[RESET]   derived images cleared for format {fmt}")
 
 
 def build_images(albums):
@@ -378,12 +447,9 @@ def build_images(albums):
         orig_dir = OUTPUT_DIR / "photos" / slug
         ensure_dir(orig_dir)
         for p in a["photos"]:
-            made += render(p, OUTPUT_DIR / "grid" / slug / p.name, GRID_SIZE, GRID_SIZE, 80)
-            made += render(p, OUTPUT_DIR / "previews" / slug / p.name, PREVIEW_SIZE, PREVIEW_SIZE, 85)
-            dst = orig_dir / p.name
-            if not is_fresh(p, dst):
-                shutil.copyfile(p, dst)               # original; copy2 fails on rclone (xattrs)
-                made += 1
+            made += render(p, OUTPUT_DIR / "grid" / slug / p.name, GRID_SIZE, GRID_SIZE, 80, watermark=True)
+            made += render(p, OUTPUT_DIR / "previews" / slug / p.name, PREVIEW_SIZE, PREVIEW_SIZE, 85, watermark=True)
+            made += render_original(p, orig_dir / p.name)
         print(f"[IMG]     {a['name']}: {len(a['photos'])} photos, {made} file(s) (re)generated")
 
 

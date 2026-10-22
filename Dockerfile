@@ -6,6 +6,7 @@ RUN pip install --no-cache-dir Pillow==12.2.0
 
 COPY build.py .
 COPY static ./static
+COPY brand ./brand
 
 ENV PHOTOS_DIR=/photos
 ENV OUTPUT_DIR=/output
