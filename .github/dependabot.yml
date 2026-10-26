@@ -1,0 +1,44 @@
+# Dependabot opent elke dag PR's voor nieuwe versies. De workflow
+# dependabot-samenvoegen.yml merget ze vanzelf en start de uitrol; gaat er
+# iets mis, dan komt dat in #git-updates.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 5
+    ignore:
+      # Een nieuwe hoofdversie vraagt hier een omzetting van de
+      # data (dump/restore, werelden en modules). Patches binnen
+      # de versie komen wel gewoon door.
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+      - dependency-name: felddy/foundryvtt
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker-compose
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 5
+    ignore:
+      # Een nieuwe hoofdversie vraagt hier een omzetting van de
+      # data (dump/restore, werelden en modules). Patches binnen
+      # de versie komen wel gewoon door.
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+      - dependency-name: felddy/foundryvtt
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: daily
+      time: "06:00"
+      timezone: Europe/Amsterdam
+    open-pull-requests-limit: 5

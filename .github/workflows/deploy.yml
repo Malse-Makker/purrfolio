@@ -1,6 +1,10 @@
 name: Deploy to production
 
 on:
+  # Zodat dependabot-samenvoegen.yml na een automatische merge de
+  # uitrol kan starten: een merge met GITHUB_TOKEN start zelf geen
+  # push-workflows.
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -21,3 +25,54 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > "$KEY_FILE"
           ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no ubuntu@makkers.net \
             "cd /home/ubuntu/purrfolio && git fetch origin main && git reset --hard origin/main && flock /tmp/micktures-rebuild.lock bash build.sh && docker compose up -d --build --force-recreate"
+
+  # Na de uitrol: antwoordt de site nog, en zo niet, een melding. Bewust een
+  # aparte job achter de uitrol in plaats van stappen erin: zo hoeft geen
+  # enkele uitrol aangepast te worden, en ziet deze job ook als de uitrol zelf
+  # al faalde.
+  controleren:
+    needs: [deploy]
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WEBHOOK: ${{ secrets.MATTERMOST_WEBHOOK }}
+      UITROL: ${{ join(needs.*.result, ',') }}
+      URLS: "https://micktures.nl/"
+      REPO: ${{ github.repository }}
+      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Antwoordt de site, en melden in #git-updates
+        run: |
+          stuk=""
+          for url in $URLS; do
+            code=000
+            # Drie minuten de tijd: een container die net is herbouwd heeft
+            # soms even nodig. Een doorverwijzing (naar een inlogpagina) telt
+            # als levend; pas vanaf 500 of zonder antwoord is het stuk.
+            for i in $(seq 1 18); do
+              # '|| true': GitHub draait dit met set -e, en dan stopt een
+              # mislukte curl het script vóór de melding -- juist dan.
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$url" || true)
+              code=${code:-000}
+              [ "$code" -ge 200 ] && [ "$code" -lt 500 ] && break
+              sleep 10
+            done
+            if [ "$code" -lt 200 ] || [ "$code" -ge 500 ]; then stuk="$stuk $url (HTTP $code)"; fi
+          done
+          commit=$(gh api "repos/$REPO/commits/main" --jq '"\(.sha[0:7]) \(.commit.message | split("\n")[0])"' || echo "onbekende commit")
+          if echo "$UITROL" | grep -qvE '^((success|skipped),?)+$' || [ -n "$stuk" ]; then
+            reden="uitrol: $UITROL"; [ -n "$stuk" ] && reden="$reden; antwoordt niet:$stuk"
+            tekst=":red_circle: **$REPO** kapot na de uitrol van \`$commit\`
+          $reden — [wat er misging]($RUN)"
+            fout=1
+          else
+            tekst=":white_check_mark: **$REPO** live: \`$commit\`"
+            fout=0
+          fi
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+                 -d "$(jq -n --arg t "$tekst" '{text: $t}')" "$WEBHOOK" >/dev/null
+          fi
+          echo "$tekst"
+          exit $fout
