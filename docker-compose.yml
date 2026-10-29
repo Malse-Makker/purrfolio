@@ -1,6 +1,7 @@
 services:
   nginx:
-    image: nginx:alpine
+    # Eigen build voor de Alpine-patches; zie nginx-image/Dockerfile.
+    build: ./nginx-image
     container_name: purrfolio-nginx
     restart: unless-stopped
     ports:
