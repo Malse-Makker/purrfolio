@@ -13,6 +13,12 @@ on:
 # (private) repo via its own read-only deploy key, regenerates the static
 # gallery and recreates the container. Only SSH_PRIVATE_KEY is a secret;
 # host, user and path are fixed and low-risk.
+# Nooit twee uitrollen tegelijk: dan botsen ze op de containernaam (quiz,
+# 31 oktober 2026: een push en een handmatige start tegelijk). De tweede wacht.
+concurrency:
+  group: uitrol
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
