@@ -34,6 +34,11 @@ permissions:
   contents: write
   pull-requests: write
   actions: write
+  # Om de andere controles te kunnen lezen. Zonder deze twee gaf `gh pr checks`
+  # niets terug, wachtte de job twintig minuten en mergede hij nooit
+  # (26 oktober 2026, alle 22 PR's bleven open staan).
+  checks: read
+  statuses: read
 
 jobs:
   samenvoegen:
@@ -56,8 +61,20 @@ jobs:
           # Deze job staat zelf ook in de lijst; die telt niet mee, anders
           # wacht hij op zichzelf.
           for i in $(seq 1 60); do
-            rest=$(gh pr checks "$PR" -R "$REPO" --json name,bucket 2>/dev/null \
-                   | jq '[.[] | select(.name != "samenvoegen")]' || echo '[]')
+            # gh geeft een foutcode zolang er iets loopt, dus || true; of het
+            # antwoord bruikbaar is blijkt uit de JSON. Een fout wordt getoond
+            # in plaats van stil als "niets te wachten" gelezen.
+            uit=$(gh pr checks "$PR" -R "$REPO" --json name,bucket 2>&1) || true
+            if ! echo "$uit" | jq -e 'type == "array"' >/dev/null 2>&1; then
+              if echo "$uit" | grep -q "no checks reported"; then
+                uit='[]'
+              else
+                echo "gh pr checks gaf geen lijst: $uit"
+                sleep 20
+                continue
+              fi
+            fi
+            rest=$(echo "$uit" | jq '[.[] | select(.name != "samenvoegen")]')
             fout=$(echo "$rest" | jq '[.[] | select(.bucket=="fail" or .bucket=="cancel")] | length')
             open=$(echo "$rest" | jq '[.[] | select(.bucket=="pending")] | length')
             if [ "$fout" -gt 0 ]; then
