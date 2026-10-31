@@ -89,9 +89,36 @@ jobs:
           exit 1
 
       - name: Samenvoegen
-        run: gh pr merge "$PR" -R "$REPO" --squash --delete-branch
+        id: samenvoegen
+        run: |
+          # Meerdere updates in dezelfde repo tegelijk botsen: de eerste merget,
+          # de rest ziet "base branch was modified" of een conflict in
+          # requirements.txt. Dat is geen fout en geeft geen rode melding
+          # (31 oktober 2026 kwamen er zo een handvol onterecht binnen).
+          for i in 1 2 3 4 5; do
+            if uit=$(gh pr merge "$PR" -R "$REPO" --squash --delete-branch 2>&1); then
+              echo "gemerged=ja" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "$uit"
+            case "$uit" in
+              *"merge conflicts"*|*"not mergeable"*)
+                # Dependabot bouwt de PR opnieuw op (dat doet hij bij een
+                # conflict ook uit zichzelf); dat start deze workflow weer.
+                gh pr comment "$PR" -R "$REPO" --body "@dependabot rebase" || true
+                echo "Conflict met een update die eerder was; Dependabot bouwt opnieuw op."
+                echo "gemerged=nee" >> "$GITHUB_OUTPUT"
+                exit 0 ;;
+              *"Base branch was modified"*)
+                sleep $((RANDOM % 20 + 10)) ;;
+              *)
+                exit 1 ;;
+            esac
+          done
+          exit 1
 
       - name: Uitrollen
+        if: steps.samenvoegen.outputs.gemerged == 'ja'
         run: |
           if gh workflow view deploy.yml -R "$REPO" >/dev/null 2>&1; then
             gh workflow run deploy.yml -R "$REPO" --ref main
