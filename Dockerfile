@@ -2,7 +2,8 @@ FROM python:3.15-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir Pillow==12.2.0
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY build.py .
 COPY static ./static
